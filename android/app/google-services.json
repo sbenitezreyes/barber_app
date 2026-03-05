@@ -1,0 +1,76 @@
+{
+  "project_info": {
+    "project_number": "345975115166",
+    "project_id": "yacut-final",
+    "storage_bucket": "yacut-final.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:345975115166:android:2a7b96c424bad38b189a8f",
+        "android_client_info": {
+          "package_name": "com.example.barberapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "345975115166-7lb4csthk0v1mtbti1t9ilao8ifgkfte.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.barberapp",
+            "certificate_hash": "bb29b2624423981124542bcfe5e353be9c9bc6a4"
+          }
+        },
+        {
+          "client_id": "345975115166-gqtuifchttuui1gs2an732uor5v8tq1e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAdN522HZot7Wva0QgoO-rEkDouCsMK2rQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "345975115166-gqtuifchttuui1gs2an732uor5v8tq1e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:345975115166:android:987949876148a96b189a8f",
+        "android_client_info": {
+          "package_name": "com.example.barberapp.barber"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "345975115166-gqtuifchttuui1gs2an732uor5v8tq1e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAdN522HZot7Wva0QgoO-rEkDouCsMK2rQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "345975115166-gqtuifchttuui1gs2an732uor5v8tq1e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
