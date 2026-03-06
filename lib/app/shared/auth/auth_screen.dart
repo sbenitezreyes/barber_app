@@ -5,7 +5,10 @@ import 'login_form.dart';
 import 'register_form.dart';
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  /// Si es true, después del login exitoso regresa en lugar de ir al home
+  final bool returnAfterAuth;
+  
+  const AuthScreen({super.key, this.returnAfterAuth = false});
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -143,9 +146,9 @@ class _AuthScreenState extends State<AuthScreen>
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
-                  children: const [
-                    LoginForm(),
-                    RegisterForm(),
+                  children: [
+                    LoginForm(returnAfterAuth: widget.returnAfterAuth),
+                    RegisterForm(returnAfterAuth: widget.returnAfterAuth),
                   ],
                 ),
               ),

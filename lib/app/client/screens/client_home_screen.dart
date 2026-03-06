@@ -2,6 +2,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'barber_tracking_screen.dart';
@@ -23,6 +24,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   Stream<QuerySnapshot>? _notifStream;
   Stream<QuerySnapshot>? _trackingStream;
   Set<String> _seenIds = {};
+  final _flnPlugin = FlutterLocalNotificationsPlugin();
 
   static const _tabs = [
     HomeTab(),
@@ -56,7 +58,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     _notifStream = FirebaseFirestore.instance
         .collection('appointments')
         .where('clientUid', isEqualTo: uid)
-        .where('status', whereIn: ['confirmed', 'rejected'])
+        .where('status', whereIn: ['confirmed', 'rejected', 'cancelled'])
         .snapshots();
     // Solo 2 filtros para evitar índice compuesto en Firestore.
     // El filtro isImmediate se aplica en el builder.
@@ -99,6 +101,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       sound: true,
     );
 
+    // Initialize local notifications plugin
+    const initSettings = InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(),
+    );
+    await _flnPlugin.initialize(initSettings);
+
     // Navigate to appointments tab when notification is tapped
     FirebaseMessaging.onMessageOpenedApp.listen((msg) {
       if (mounted && msg.data['type'] == 'appointment_status') {
@@ -111,6 +120,26 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     if (initial != null && mounted && initial.data['type'] == 'appointment_status') {
       setState(() => _currentIndex = 2);
     }
+
+    // ── Show notification when app is in FOREGROUND ──
+    FirebaseMessaging.onMessage.listen((msg) {
+      final notification = msg.notification;
+      if (notification == null) return;
+      
+      const androidDetails = AndroidNotificationDetails(
+        'appointments_channel',
+        'Notificaciones de citas',
+        channelDescription: 'Actualizaciones sobre tus citas',
+        importance: Importance.high,
+        priority: Priority.high,
+      );
+      _flnPlugin.show(
+        notification.hashCode,
+        notification.title,
+        notification.body,
+        const NotificationDetails(android: androidDetails),
+      );
+    });
 
     await _saveToken();
     FirebaseMessaging.instance.onTokenRefresh.listen((_) => _saveToken());
@@ -334,7 +363,7 @@ class _ClientNotificationsPanelState extends State<_ClientNotificationsPanel> {
     final snap = await FirebaseFirestore.instance
         .collection('appointments')
         .where('clientUid', isEqualTo: widget.clientUid)
-        .where('status', whereIn: ['confirmed', 'rejected'])
+        .where('status', whereIn: ['confirmed', 'rejected', 'cancelled'])
         .get();
     final ids = snap.docs.map((d) => d.id).toList();
     await widget.onSeen(ids);
@@ -372,13 +401,13 @@ class _ClientNotificationsPanelState extends State<_ClientNotificationsPanel> {
                 .where((d) => (d.data() as Map)['status'] == 'pending')
                 .toList();
 
-            // Actividad reciente = confirmadas/rechazadas Ãºltimos 7 dÃ­as
+            // Actividad reciente = confirmadas/rechazadas/canceladas últimos 7 días
             final recent = allDocs.where((d) {
               final data = d.data() as Map<String, dynamic>;
               final status = data['status'] as String? ?? '';
               final ts = (data['createdAt'] ?? data['scheduledAt']) as Timestamp?;
               if (ts == null) return false;
-              return (status == 'confirmed' || status == 'rejected') &&
+              return (status == 'confirmed' || status == 'rejected' || status == 'cancelled') &&
                   ts.compareTo(sevenDaysAgo) >= 0;
             }).toList()
               ..sort((a, b) {
@@ -419,21 +448,6 @@ class _ClientNotificationsPanelState extends State<_ClientNotificationsPanel> {
                     const Text('Notificaciones',
                         style: TextStyle(
                             fontSize: 17, fontWeight: FontWeight.bold)),
-                    const Spacer(),
-                    if (totalCount > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text('$totalCount',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold)),
-                      ),
                   ]),
                 ),
                 const SizedBox(height: 8),
@@ -613,6 +627,11 @@ class _ClientNotificationsPanelState extends State<_ClientNotificationsPanel> {
                                         statusIcon = Icons.cancel_outlined;
                                         statusLabel = 'Rechazada';
                                         break;
+                                      case 'cancelled':
+                                        statusColor = Colors.orangeAccent;
+                                        statusIcon = Icons.event_busy;
+                                        statusLabel = '$barberName canceló la cita';
+                                        break;
                                       default:
                                         statusColor =
                                             theme.colorScheme.primary;
@@ -646,7 +665,9 @@ class _ClientNotificationsPanelState extends State<_ClientNotificationsPanel> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  '$statusLabel Â· $barberName',
+                                                  status == 'cancelled' 
+                                                    ? statusLabel 
+                                                    : '$statusLabel Â· $barberName',
                                                   style: const TextStyle(
                                                       fontWeight:
                                                           FontWeight.w600,

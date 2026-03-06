@@ -114,17 +114,34 @@ exports.onAppointmentStatusChanged = onDocumentUpdated(
       });
     }
 
-    // ── Notificar al barbero cuando el cliente cancela ───────
+    // ── Notificar a la persona correcta cuando se cancela ───────
     if (status === 'cancelled') {
-      const barberDoc = await db.collection('users').doc(after.barberUid).get();
-      const barberToken = barberDoc.data()?.fcmToken;
-      const clientName = after.clientName ?? 'El cliente';
-      await sendPush(
-        barberToken,
-        '❌ Cita cancelada',
-        `${clientName} canceló la cita de ${serviceName}`,
-        { appointmentId, type: 'appointment_status', status }
-      );
+      const cancelledBy = after.cancelledBy;
+      console.log(`Cancellation detected. cancelledBy: ${cancelledBy}, clientUid: ${clientUid}, barberUid: ${after.barberUid}`);
+      
+      // Si el cliente canceló, notificar al barbero
+      if (cancelledBy === clientUid) {
+        const barberDoc = await db.collection('users').doc(after.barberUid).get();
+        const barberToken = barberDoc.data()?.fcmToken;
+        const clientName = after.clientName ?? 'El cliente';
+        console.log(`Client cancelled. Notifying barber with token: ${barberToken?.slice(0, 20)}...`);
+        await sendPush(
+          barberToken,
+          '❌ Cita cancelada',
+          `${clientName} canceló la cita de ${serviceName}`,
+          { appointmentId, type: 'appointment_status', status }
+        );
+      }
+      // Si el barbero canceló, notificar al cliente
+      else if (cancelledBy === after.barberUid) {
+        console.log(`Barber cancelled. Notifying client with token: ${fcmToken?.slice(0, 20)}...`);
+        await sendPush(
+          fcmToken,
+          '❌ Cita cancelada',
+          `${barberName} canceló tu cita de ${serviceName}`,
+          { appointmentId, type: 'appointment_status', status }
+        );
+      }
     }
   }
 );

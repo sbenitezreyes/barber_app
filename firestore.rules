@@ -46,17 +46,17 @@ service cloud.firestore {
         && (resource.data.clientUid == request.auth.uid
             || resource.data.barberUid == request.auth.uid);
 
-      // Barber can update status and GPS coordinates
+      // Barber can update status, GPS coordinates, and cancelledBy when cancelling
       allow update: if request.auth != null
         && resource.data.barberUid == request.auth.uid
         && request.resource.data.diff(resource.data)
-            .affectedKeys().hasOnly(['status', 'barberCurrentLat', 'barberCurrentLng']);
+            .affectedKeys().hasOnly(['status', 'barberCurrentLat', 'barberCurrentLng', 'cancelledBy']);
 
-      // Client can cancel their own appointment (status → 'cancelled')
+      // Client can cancel their own appointment (status → 'cancelled' + cancelledBy)
       allow update: if request.auth != null
         && resource.data.clientUid == request.auth.uid
         && request.resource.data.diff(resource.data)
-            .affectedKeys().hasOnly(['status'])
+            .affectedKeys().hasOnly(['status', 'cancelledBy'])
         && request.resource.data.status == 'cancelled';
     }
   }

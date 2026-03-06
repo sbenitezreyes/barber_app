@@ -8,7 +8,9 @@ import 'navigate_to_home.dart';
 import 'terms_screen.dart';
 
 class RegisterForm extends StatefulWidget {
-  const RegisterForm({super.key});
+  final bool returnAfterAuth;
+  
+  const RegisterForm({super.key, this.returnAfterAuth = false});
 
   @override
   State<RegisterForm> createState() => _RegisterFormState();
@@ -53,7 +55,7 @@ class _RegisterFormState extends State<RegisterForm> {
       final credential = await GoogleAuthService.signInWithGoogle();
       if (credential == null) return; // usuario canceló
       if (!context.mounted) return;
-      navigateToHome(context);
+      navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -102,7 +104,7 @@ class _RegisterFormState extends State<RegisterForm> {
         ),
       );
 
-      navigateToHome(context);
+      navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } on FirebaseAuthException catch (e) {
       String message;
       if (e.code == 'email-already-in-use') {

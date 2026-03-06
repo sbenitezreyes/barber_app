@@ -300,7 +300,10 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> {
                   await FirebaseFirestore.instance
                       .collection('appointments')
                       .doc(doc.id)
-                      .update({'status': 'cancelled'});
+                      .update({
+                        'status': 'cancelled',
+                        'cancelledBy': FirebaseAuth.instance.currentUser?.uid,
+                      });
                 },
               );
             },
@@ -499,21 +502,6 @@ class _NotificationsPanelState extends State<_NotificationsPanel> {
                     const Text('Notificaciones',
                         style: TextStyle(
                             fontSize: 17, fontWeight: FontWeight.bold)),
-                    const Spacer(),
-                    if (totalCount > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text('$totalCount',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold)),
-                      ),
                   ]),
                 ),
                 const SizedBox(height: 8),
@@ -782,6 +770,7 @@ class _NotificationsPanelState extends State<_NotificationsPanel> {
                                         d['serviceName'] ?? '';
                                     final status =
                                         d['status'] as String? ?? '';
+                                    final cancelledBy = d['cancelledBy'] as String?;
                                     final ts =
                                         d['createdAt'] as Timestamp?;
                                     final dt =
@@ -791,22 +780,33 @@ class _NotificationsPanelState extends State<_NotificationsPanel> {
                                     Color statusColor;
                                     IconData statusIcon;
                                     String statusLabel;
+                                    String displayText;
+                                    
                                     switch (status) {
                                       case 'confirmed':
                                         statusColor = Colors.greenAccent;
                                         statusIcon =
                                             Icons.check_circle_outline;
                                         statusLabel = 'Confirmada';
+                                        displayText = '$statusLabel · $clientName';
                                         break;
                                       case 'rejected':
                                         statusColor = Colors.redAccent;
                                         statusIcon = Icons.cancel_outlined;
                                         statusLabel = 'Rechazada';
+                                        displayText = '$statusLabel · $clientName';
                                         break;
                                       case 'cancelled':
                                         statusColor = Colors.redAccent;
                                         statusIcon = Icons.event_busy;
-                                        statusLabel = 'Cancelada';
+                                        // Si el barbero canceló, mostrar mensaje personalizado
+                                        if (cancelledBy == widget.uid) {
+                                          statusLabel = 'Cancelada';
+                                          displayText = 'Haz cancelado la cita a: $clientName';
+                                        } else {
+                                          statusLabel = 'Cancelada';
+                                          displayText = '$statusLabel · $clientName';
+                                        }
                                         break;
                                       default:
                                         statusColor =
@@ -814,6 +814,7 @@ class _NotificationsPanelState extends State<_NotificationsPanel> {
                                         statusIcon =
                                             Icons.task_alt_rounded;
                                         statusLabel = 'Completada';
+                                        displayText = '$statusLabel · $clientName';
                                     }
 
                                     return Padding(
@@ -841,7 +842,7 @@ class _NotificationsPanelState extends State<_NotificationsPanel> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  '$statusLabel Â· $clientName',
+                                                  displayText,
                                                   style: const TextStyle(
                                                       fontWeight:
                                                           FontWeight.w600,

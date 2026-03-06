@@ -27,8 +27,13 @@ class _SplashScreenState extends State<SplashScreen> {
     final config = AppConfig.of(context);
     final user = FirebaseAuth.instance.currentUser;
     
-    if (user != null) {
-      // Sesión activa: ir directo al home
+    print('🔍 SplashScreen - Usuario actual: ${user?.uid ?? 'null'}');
+    print('🔍 SplashScreen - Es anónimo: ${user?.isAnonymous ?? 'N/A'}');
+    print('🔍 SplashScreen - Es cliente: ${config.isClient}');
+    
+    if (user != null && !user.isAnonymous) {
+      // Sesión activa de usuario real: ir directo al home
+      print('✅ Usuario real detectado, ir a home');
       final Widget home = config.isClient
           ? const ClientHomeScreen()
           : const BarberHomeScreen();
@@ -36,16 +41,19 @@ class _SplashScreenState extends State<SplashScreen> {
         MaterialPageRoute(builder: (_) => home),
       );
     } else {
-      // Si es cliente y no hay usuario, hacer login anónimo
+      // Si es cliente y no hay usuario (o es anónimo cadcucado), hacer login anónimo
       if (config.isClient) {
         try {
-          await FirebaseAuth.instance.signInAnonymously();
+          print('🔐 Intentando login anónimo...');
+          final userCredential = await FirebaseAuth.instance.signInAnonymously();
+          print('✅ Login anónimo exitoso: ${userCredential.user?.uid}');
           if (!mounted) return;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const ClientHomeScreen()),
           );
         } catch (e) {
           // Si falla el login anónimo, ir a AuthScreen
+          print('❌ Error en login anónimo: $e');
           if (!mounted) return;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const AuthScreen()),
@@ -53,6 +61,7 @@ class _SplashScreenState extends State<SplashScreen> {
         }
       } else {
         // Para barberos, siempre ir a AuthScreen
+        print('👨‍💼 Barbero detectado, ir a AuthScreen');
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const AuthScreen()),
         );

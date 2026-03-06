@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../shared/auth/auth_screen.dart';
+import 'client_home_screen.dart';
 
 // ── Modelo de servicio exportado para uso en el sheet ───────────
 class BookService {
@@ -46,6 +47,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   bool _saving = false;
+  bool _justAuthenticated = false; // Indica si el usuario acaba de autenticarse
 
   // ── Helpers ──────────────────────────────────────────────────
   String _formatPrice(double p) {
@@ -89,10 +91,17 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   Future<void> _confirmAppointment() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null || currentUser.isAnonymous) {
-      Navigator.push(
+      // Navegar al login y esperar el resultado
+      final result = await Navigator.push<bool>(
         context,
-        MaterialPageRoute(builder: (_) => AuthScreen()),
+        MaterialPageRoute(builder: (_) => const AuthScreen(returnAfterAuth: true)),
       );
+      
+      // Si el usuario completó el login, marcar que se acaba de autenticar
+      if (result == true && mounted) {
+        setState(() => _justAuthenticated = true);
+        await _confirmAppointment();
+      }
       return;
     }
     setState(() => _saving = true);
@@ -148,15 +157,42 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         if (clientLng != null) 'clientLng': clientLng,
       });
 
-      if (mounted) {
+      if (!mounted) return;
+
+      // Si el usuario acaba de autenticarse, recargar toda la app
+      if (_justAuthenticated) {
+        // Capturar el messenger antes de navegar
+        final messenger = ScaffoldMessenger.of(context);
+        final primaryColor = Theme.of(context).colorScheme.primary;
+        
+        // Navegar al home
+        await Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const ClientHomeScreen()),
+          (route) => false,
+        );
+        
+        // Mostrar mensaje de éxito
+        messenger.showSnackBar(
+          SnackBar(
+            content: const Text('¡Cita solicitada con éxito!'),
+            backgroundColor: primaryColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      } else {
+        // Flujo normal: solo cerrar la pantalla
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('¡Cita solicitada con éxito!'),
             backgroundColor: Theme.of(context).colorScheme.primary,
             behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }

@@ -19,6 +19,7 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> {
   static const _initialPosition = LatLng(4.7110, -74.0721); // Bogotá
+  GoogleMapController? _mapController;
   bool _locationGranted = false;
   Set<Marker> _markers = {};
   StreamSubscription<QuerySnapshot>? _barbersSub;
@@ -53,6 +54,30 @@ class _HomeTabState extends State<HomeTab> {
   Future<void> _requestLocation() async {
     final status = await Permission.location.request();
     if (mounted) setState(() => _locationGranted = status.isGranted);
+    
+    // Centrar mapa en ubicación del usuario
+    if (status.isGranted) {
+      _centerOnUserLocation();
+    }
+  }
+
+  Future<void> _centerOnUserLocation() async {
+    if (_mapController == null) return;
+    try {
+      final location = await _mapController!.getLatLng(
+        ScreenCoordinate(x: 0, y: 0),
+      );
+      // Esperar un poco para que myLocation esté disponible
+      await Future.delayed(const Duration(milliseconds: 500));
+      _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          const CameraPosition(
+            target: _initialPosition,
+            zoom: 15,
+          ),
+        ),
+      );
+    } catch (_) {}
   }
 
   // ── Construye un marcador personalizado con inicial del barbero ──
@@ -292,6 +317,10 @@ class _HomeTabState extends State<HomeTab> {
         target: _initialPosition,
         zoom: 15,
       ),
+      onMapCreated: (controller) {
+        _mapController = controller;
+        if (_locationGranted) _centerOnUserLocation();
+      },
       myLocationButtonEnabled: _locationGranted,
       myLocationEnabled: _locationGranted,
       zoomControlsEnabled: false,

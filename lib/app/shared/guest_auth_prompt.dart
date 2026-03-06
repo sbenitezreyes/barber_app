@@ -44,7 +44,7 @@ class GuestAuthPrompt extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => AuthScreen()),
+                  MaterialPageRoute(builder: (_) => const AuthScreen()),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: theme.colorScheme.primary,
@@ -63,7 +63,7 @@ class GuestAuthPrompt extends StatelessWidget {
               child: OutlinedButton(
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => AuthScreen()),
+                  MaterialPageRoute(builder: (_) => const AuthScreen()),
                 ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: theme.colorScheme.primary,
@@ -83,11 +83,13 @@ class GuestAuthPrompt extends StatelessWidget {
 }
 
 /// Muestra [GuestAuthPrompt] como modal bottom sheet.
+/// Si [returnAfterAuth] es true, después del login vuelve al contexto anterior.
 void showGuestAuthSheet(
   BuildContext context, {
   String title = 'Inicia sesión',
   String subtitle = 'Crea una cuenta o inicia sesión para continuar',
   IconData icon = Icons.lock_outline_rounded,
+  bool returnAfterAuth = true,
 }) {
   showModalBottomSheet(
     context: context,
@@ -126,8 +128,12 @@ void showGuestAuthSheet(
             child: ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => AuthScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AuthScreen(returnAfterAuth: returnAfterAuth),
+                  ),
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.primary,
@@ -146,8 +152,12 @@ void showGuestAuthSheet(
             child: OutlinedButton(
               onPressed: () {
                 Navigator.pop(context);
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => AuthScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AuthScreen(returnAfterAuth: returnAfterAuth),
+                  ),
+                );
               },
               style: OutlinedButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.primary,

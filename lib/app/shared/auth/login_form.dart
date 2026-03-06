@@ -7,7 +7,9 @@ import 'google_auth_service.dart';
 import 'navigate_to_home.dart';
 
 class LoginForm extends StatefulWidget {
-  const LoginForm({super.key});
+  final bool returnAfterAuth;
+  
+  const LoginForm({super.key, this.returnAfterAuth = false});
 
   @override
   State<LoginForm> createState() => _LoginFormState();
@@ -31,7 +33,7 @@ class _LoginFormState extends State<LoginForm> {
       final credential = await GoogleAuthService.signInWithGoogle();
       if (credential == null) return; // usuario canceló
       if (!context.mounted) return;
-      navigateToHome(context);
+      navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,7 +85,7 @@ class _LoginFormState extends State<LoginForm> {
       }
 
       if (!mounted) return;
-      navigateToHome(context);
+      navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } on FirebaseAuthException catch (e) {
       String message;
       if (e.code == 'user-not-found') {
