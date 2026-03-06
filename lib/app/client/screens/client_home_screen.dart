@@ -9,6 +9,7 @@ import 'tabs/home_tab.dart';
 import 'tabs/favorites_tab.dart';
 import 'tabs/appointments_tab.dart';
 import 'tabs/profile_tab.dart';
+import 'welcome_dialog.dart';
 
 class ClientHomeScreen extends StatefulWidget {
   const ClientHomeScreen({super.key});
@@ -37,6 +38,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     super.initState();
     _initFcm();
     _initBadgeStream();
+    
+    // Mostrar diálogo de bienvenida si es la primera vez
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WelcomeDialog.showIfFirstTime(context);
+    });
   }
 
   void _initBadgeStream() {

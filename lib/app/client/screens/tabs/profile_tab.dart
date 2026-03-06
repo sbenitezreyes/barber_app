@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../shared/splash_screen.dart';
+import '../../../shared/guest_auth_prompt.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
@@ -10,6 +11,16 @@ class ProfileTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final user = FirebaseAuth.instance.currentUser;
+    final isGuest = user == null || user.isAnonymous;
+
+    // Mostrar GuestAuthPrompt si es invitado
+    if (isGuest) {
+      return const GuestAuthPrompt(
+        title: 'Tu perfil te espera',
+        subtitle: 'Crea una cuenta para personalizar tu perfil y gestionar tus preferencias',
+        icon: Icons.person_outline_rounded,
+      );
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),

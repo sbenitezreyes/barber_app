@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../barber_tracking_screen.dart';
+import '../../../shared/guest_auth_prompt.dart';
 
 // ── Modelo de cita del cliente ───────────────────────────────────
 class _ClientAppointment {
@@ -113,6 +114,18 @@ class _AppointmentsTabState extends State<AppointmentsTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final now = DateTime.now();
+    
+    // Verificar si el usuario es invitado
+    final user = FirebaseAuth.instance.currentUser;
+    final isGuest = user == null || user.isAnonymous;
+
+    if (isGuest) {
+      return const GuestAuthPrompt(
+        title: 'Gestiona tus citas',
+        subtitle: 'Inicia sesión para ver y administrar tus citas agendadas',
+        icon: Icons.calendar_today_outlined,
+      );
+    }
 
     if (_loading) {
       return const Center(child: CircularProgressIndicator());

@@ -24,10 +24,11 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 
+    final config = AppConfig.of(context);
     final user = FirebaseAuth.instance.currentUser;
+    
     if (user != null) {
       // Sesión activa: ir directo al home
-      final config = AppConfig.of(context);
       final Widget home = config.isClient
           ? const ClientHomeScreen()
           : const BarberHomeScreen();
@@ -35,9 +36,27 @@ class _SplashScreenState extends State<SplashScreen> {
         MaterialPageRoute(builder: (_) => home),
       );
     } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AuthScreen()),
-      );
+      // Si es cliente y no hay usuario, hacer login anónimo
+      if (config.isClient) {
+        try {
+          await FirebaseAuth.instance.signInAnonymously();
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const ClientHomeScreen()),
+          );
+        } catch (e) {
+          // Si falla el login anónimo, ir a AuthScreen
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const AuthScreen()),
+          );
+        }
+      } else {
+        // Para barberos, siempre ir a AuthScreen
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const AuthScreen()),
+        );
+      }
     }
   }
 
