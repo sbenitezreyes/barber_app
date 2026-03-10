@@ -3,7 +3,9 @@ import 'dart:io' show Platform;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../services/gps_service.dart';
@@ -141,6 +143,77 @@ class _BarberSettingsTabState extends State<BarberSettingsTab> {
     }
   }
 
+  Future<void> _testNotifications() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        _showDialog('Error', 'No hay usuario autenticado');
+        return;
+      }
+
+      // Obtener token actual del dispositivo
+      final currentToken = await FirebaseMessaging.instance.getToken();
+      if (currentToken == null) {
+        _showDialog('Error', 'No se pudo obtener el token FCM del dispositivo');
+        return;
+      }
+
+      // Obtener token guardado en Firestore
+      final userDoc = await _userDoc.get();
+      final savedToken = userDoc.data()?['fcmToken'] as String?;
+
+      String message = '✅ Token actual (dispositivo):\n${currentToken.substring(0, 50)}...\n\n';
+      
+      if (savedToken != null) {
+        message += '📋 Token guardado (Firestore):\n${savedToken.substring(0, 50)}...\n\n';
+        
+        if (savedToken == currentToken) {
+          message += '✅ Los tokens coinciden\n\n';
+        } else {
+          message += '⚠️ LOS TOKENS NO COINCIDEN\nActualizando token en Firestore...\n\n';
+          await _userDoc.set({'fcmToken': currentToken}, SetOptions(merge: true));
+          message += '✅ Token actualizado exitosamente';
+        }
+      } else {
+        message += '⚠️ No hay token guardado en Firestore\nGuardando token...\n\n';
+        await _userDoc.set({'fcmToken': currentToken}, SetOptions(merge: true));
+        message += '✅ Token guardado exitosamente';
+      }
+
+      _showDialog('Estado de Notificaciones', message);
+    } catch (e) {
+      _showDialog('Error', 'Error verificando notificaciones:\n$e');
+    }
+  }
+
+  void _showDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: SelectableText(message),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: message));
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Copiado al portapapeles')),
+              );
+            },
+            child: const Text('Copiar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -200,6 +273,39 @@ class _BarberSettingsTabState extends State<BarberSettingsTab> {
                 activeThumbColor: theme.colorScheme.primary,
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        _SettingCard(
+          child: InkWell(
+            onTap: _testNotifications,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.bug_report, color: Colors.orangeAccent),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Verificar notificaciones',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Comprobar estado del token FCM',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Colors.white54),
+                ],
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 24),

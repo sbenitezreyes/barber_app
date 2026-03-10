@@ -153,11 +153,23 @@ class _BarberScheduleTabState extends State<BarberScheduleTab> {
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
-  List<_Appt> _forDay(List<_Appt> all, DateTime day) => all
-      .where((a) =>
-          (a.status == 'confirmed' || a.status == 'completed') &&
-          _isSameDay(a.scheduledAt, day))
-      .toList();
+  // Solo muestra citas del día seleccionado (sin filtrar por fecha pasada aquí)
+  List<_Appt> _forDay(List<_Appt> all, DateTime day) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selectedDate = DateTime(day.year, day.month, day.day);
+    
+    // Si el día seleccionado es pasado, no mostrar nada
+    if (selectedDate.isBefore(today)) {
+      return [];
+    }
+    
+    return all
+        .where((a) =>
+            (a.status == 'confirmed' || a.status == 'completed') &&
+            _isSameDay(a.scheduledAt, day))
+        .toList();
+  }
 
   List<_Appt> _pending(List<_Appt> all) =>
       all.where((a) => a.status == 'pending').toList();

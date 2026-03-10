@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../client/screens/welcome_dialog.dart';
+
 /// Servicio compartido de autenticación con Google.
 /// Funciona igual para la app de cliente y la de barbero
 /// (ambas usan el mismo proyecto de Firebase).
@@ -44,5 +46,8 @@ class GoogleAuthService {
     await _ensureInitialized();
     await GoogleSignIn.instance.signOut();
     await FirebaseAuth.instance.signOut();
+    
+    // Resetear el estado del diálogo de bienvenida para que se muestre cuando vuelva a ser invitado
+    await WelcomeDialog.reset();
   }
 }

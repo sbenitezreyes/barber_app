@@ -96,6 +96,7 @@ exports.onAppointmentStatusChanged = onDocumentUpdated(
     // Fetch client's FCM token
     const clientDoc = await db.collection('users').doc(clientUid).get();
     const fcmToken = clientDoc.data()?.fcmToken;
+    console.log(`Client ${clientUid} has token: ${fcmToken ? fcmToken.slice(0, 20) + '...' : 'NONE'}`);
 
     // ── Notificar al cliente ─────────────────────────────────
     if (status === 'confirmed' || status === 'rejected') {
@@ -107,6 +108,7 @@ exports.onAppointmentStatusChanged = onDocumentUpdated(
         title = '❌ Cita rechazada';
         body = `${barberName} no pudo aceptar tu cita de ${serviceName}`;
       }
+      console.log(`Sending push to client: ${title} - ${body}`);
       await sendPush(fcmToken, title, body, {
         appointmentId,
         type: 'appointment_status',

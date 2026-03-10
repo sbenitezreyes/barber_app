@@ -21,27 +21,63 @@ class BarberHomeScreen extends StatefulWidget {
   State<BarberHomeScreen> createState() => _BarberHomeScreenState();
 }
 
-class _BarberHomeScreenState extends State<BarberHomeScreen> {
-  int _currentIndex = 0;
+class _BarberHomeScreenState extends State<BarberHomeScreen> with WidgetsBindingObserver {
+  int _currentIndex = 1; // Iniciar en Agenda
   final _notificationRefreshController = StreamController<void>.broadcast();
+  late final Stream<int> _notificationCountStream;
+  StreamSubscription? _firestoreSubscription;
+  StreamSubscription? _refreshSubscription;
 
-  static const _tabTitles = ['Agenda', 'ConfiguraciÃ³n', 'Perfil'];
+  static const _tabTitles = ['Agenda', 'Configuración', 'Perfil'];
 
   @override
   void initState() {
-    super.initState();    // Arrancar el servicio GPS de fondo (tracking de citas en tiempo real)
+    super.initState();
+    
+    // Escuchar cambios en el ciclo de vida de la app
+    WidgetsBinding.instance.addObserver(this);
+    
+    // Inicializar stream del badge
+    _notificationCountStream = _createNotificationCountStream();
+    
+    // Arrancar el servicio GPS de fondo (tracking de citas en tiempo real)
     BarberGpsService.instance.start();    // Init FCM (token saving, foreground notifications, tap routing)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FcmService.instance.init(context: context);
     });
-    // Listen for notification taps â†’ switch to Agenda tab (index 1)
+    // Listen for notification taps → switch to Agenda tab (index 1)
     scheduleTabRequested.addListener(_onScheduleTabRequested);    
+    // Listen for new notifications → refresh badge
+    notificationReceived.addListener(_onNotificationReceived);
     // Emitir evento inicial para que se calcule el contador al inicio
     Future.microtask(() => _notificationRefreshController.add(null));  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    super.didChangeAppLifecycleState(state);
+    // Cuando la app vuelve a resumed (foreground), refrescar el badge
+    if (state == AppLifecycleState.resumed) {
+      print('🔄 [BarberHomeScreen] App volvió a foreground, refrescando badge');
+      
+      // Revisar si hay notificaciones nuevas desde background
+      final prefs = await SharedPreferences.getInstance();
+      final hasNew = prefs.getBool('hasNewNotification') ?? false;
+      if (hasNew) {
+        print('✅ [BarberHomeScreen] Detectada notificación nueva, limpiando flag');
+        await prefs.setBool('hasNewNotification', false);
+      }
+      
+      _notificationRefreshController.add(null);
+    }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     scheduleTabRequested.removeListener(_onScheduleTabRequested);
+    notificationReceived.removeListener(_onNotificationReceived);
+    _firestoreSubscription?.cancel();
+    _refreshSubscription?.cancel();
     _notificationRefreshController.close();
     super.dispose();
   }
@@ -50,13 +86,20 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> {
     if (mounted) setState(() => _currentIndex = 1);
   }
 
+  void _onNotificationReceived() {
+    // Refrescar el badge cuando llega una notificación
+    print('🔔 [BarberHomeScreen] Notificación recibida, refrescando badge');
+    _notificationRefreshController.add(null);
+  }
+
   // Stream de notificaciones que requieren atención (pending + cancelled recientes)
   // excluye las que ya fueron vistas
-  Stream<int> get _notificationCountStream {
+  Stream<int> _createNotificationCountStream() {
     final controller = StreamController<int>.broadcast();
     
     // Helper para calcular y emitir el contador
     Future<void> emitCount() async {
+      print('🔢 [BarberHomeScreen] Recalculando contador de badge...');
       final prefs = await SharedPreferences.getInstance();
       final viewedIds = prefs.getStringList('viewedNotifications') ?? [];
       
@@ -84,29 +127,30 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> {
                 createdAt.compareTo(oneDayAgo) >= 0);
       }).length;
       
+      print('✅ [BarberHomeScreen] Contador actualizado: $unviewedCount notificaciones');
+      
       if (!controller.isClosed) {
         controller.add(unviewedCount);
       }
     }
     
     // Escuchar cambios en Firestore
-    final firestoreSubscription = FirebaseFirestore.instance
+    _firestoreSubscription = FirebaseFirestore.instance
         .collection('appointments')
         .where('barberUid',
             isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? '')
         .snapshots()
-        .listen((_) => emitCount());
+        .listen((_) {
+          print('📊 [BarberHomeScreen] Cambio detectado en Firestore');
+          emitCount();
+        });
     
     // Escuchar refresh manual
-    final refreshSubscription = _notificationRefreshController.stream
-        .listen((_) => emitCount());
-    
-    // Cleanup cuando se cancele
-    controller.onCancel = () {
-      firestoreSubscription.cancel();
-      refreshSubscription.cancel();
-      controller.close();
-    };
+    _refreshSubscription = _notificationRefreshController.stream
+        .listen((_) {
+          print('🔄 [BarberHomeScreen] Refresh manual del badge');
+          emitCount();
+        });
     
     // Emitir contador inicial
     emitCount();
@@ -145,6 +189,21 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> {
       builder: (_) => _NotificationsPanel(
         uid: FirebaseAuth.instance.currentUser?.uid ?? '',
       ),
+    );
+  }
+
+  void _openHistoryPanel(BuildContext context) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF18181C),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _HistoryPanel(uid: uid),
     );
   }
 
@@ -203,6 +262,13 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> {
         title: Text(_appBarTitle()),
         centerTitle: _currentIndex != 0,
         actions: [
+          // Botón de historial (solo visible en la pestaña Agenda)
+          if (_currentIndex == 1)
+            IconButton(
+              icon: const Icon(Icons.history),
+              onPressed: () => _openHistoryPanel(context),
+              tooltip: 'Ver historial',
+            ),
           StreamBuilder<int>(
             stream: _notificationCountStream,
             builder: (context, snap) {
@@ -325,9 +391,9 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> {
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Inicio',
+            icon: Icon(Icons.map_outlined),
+            activeIcon: Icon(Icons.map),
+            label: 'Mapa',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today_outlined),
@@ -337,7 +403,7 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.settings_outlined),
             activeIcon: Icon(Icons.settings),
-            label: 'ConfiguraciÃ³n',
+            label: 'Configuración',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
@@ -804,8 +870,9 @@ class _NotificationsPanelState extends State<_NotificationsPanel> {
                                           statusLabel = 'Cancelada';
                                           displayText = 'Haz cancelado la cita a: $clientName';
                                         } else {
+                                          // El cliente canceló
                                           statusLabel = 'Cancelada';
-                                          displayText = '$statusLabel · $clientName';
+                                          displayText = '$clientName canceló la cita';
                                         }
                                         break;
                                       default:
@@ -978,3 +1045,301 @@ class _ActiveRouteBanner extends StatelessWidget {
     );
   }
 }
+
+// ── Panel de historial de citas ────────────────────────────────────
+class _HistoryPanel extends StatelessWidget {
+  final String uid;
+  const _HistoryPanel({required this.uid});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('appointments')
+          .where('barberUid', isEqualTo: uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        
+        final pastAppointments = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final status = data['status'] as String?;
+          final scheduledAt = (data['scheduledAt'] as Timestamp?)?.toDate();
+          
+          if (scheduledAt == null) return false;
+          
+          final apptDate = DateTime(
+            scheduledAt.year,
+            scheduledAt.month,
+            scheduledAt.day,
+          );
+          
+          return apptDate.isBefore(today) &&
+              (status == 'completed' || status == 'confirmed');
+        }).toList();
+
+        // Ordenar por fecha descendente
+        pastAppointments.sort((a, b) {
+          final aDate = ((a.data() as Map<String, dynamic>)['scheduledAt'] as Timestamp).toDate();
+          final bDate = ((b.data() as Map<String, dynamic>)['scheduledAt'] as Timestamp).toDate();
+          return bDate.compareTo(aDate);
+        });
+
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) => Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.history, color: Colors.white70),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Historial de citas',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${pastAppointments.length} citas',
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: Colors.white12, height: 1),
+              // Lista
+              Expanded(
+                child: pastAppointments.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.history, size: 64, color: Colors.grey[700]),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No hay citas en el historial',
+                              style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: pastAppointments.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (_, i) {
+                          final doc = pastAppointments[i];
+                          final data = doc.data() as Map<String, dynamic>;
+                          return _HistoryApptCard(data: data);
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Tarjeta de cita en el historial ────────────────────────────────
+class _HistoryApptCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _HistoryApptCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final status = data['status'] as String?;
+    final clientName = data['clientName'] as String? ?? 'Cliente';
+    final serviceName = data['serviceName'] as String? ?? '';
+    final servicePrice = (data['servicePrice'] as num?)?.toDouble() ?? 0.0;
+    final serviceDuration = (data['serviceDuration'] as int?) ?? 0;
+    final scheduledAt = (data['scheduledAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+    final isImmediate = data['isImmediate'] as bool? ?? false;
+
+    Color statusColor;
+    String statusLabel;
+    IconData statusIcon;
+
+    switch (status) {
+      case 'completed':
+        statusColor = Colors.greenAccent;
+        statusLabel = 'Completada';
+        statusIcon = Icons.check_circle;
+        break;
+      case 'confirmed':
+        statusColor = Colors.orangeAccent;
+        statusLabel = 'No completada';
+        statusIcon = Icons.warning_amber_rounded;
+        break;
+      default:
+        statusColor = Colors.grey;
+        statusLabel = 'Desconocido';
+        statusIcon = Icons.help_outline;
+    }
+
+    final dateStr = DateFormat("d 'de' MMMM, yyyy", 'es').format(scheduledAt);
+    final timeStr = isImmediate ? 'Inmediata' : DateFormat('HH:mm', 'es').format(scheduledAt);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111217),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fecha y estado
+          Row(
+            children: [
+              Icon(Icons.calendar_today, size: 14, color: Colors.grey[400]),
+              const SizedBox(width: 6),
+              Text(
+                _capitalizeFirst(dateStr),
+                style: TextStyle(
+                  color: Colors.grey[300],
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(statusIcon, size: 12, color: statusColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      statusLabel,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Cliente
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: const Color(0xFF2A2A30),
+                child: Icon(Icons.person, size: 18, color: Colors.grey[300]),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      clientName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      serviceName,
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Detalles
+          Wrap(
+            spacing: 12,
+            runSpacing: 6,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.access_time, size: 14, color: Colors.grey[400]),
+                  const SizedBox(width: 4),
+                  Text(
+                    timeStr,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.timer_outlined, size: 14, color: Colors.grey[400]),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$serviceDuration min',
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.attach_money, size: 14, color: Colors.grey[400]),
+                  const SizedBox(width: 4),
+                  Text(
+                    '\$${servicePrice.toStringAsFixed(0)}',
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _capitalizeFirst(String s) =>
+    s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+

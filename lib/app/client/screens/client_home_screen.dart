@@ -139,6 +139,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         notification.body,
         const NotificationDetails(android: androidDetails),
       );
+      
+      // Forzar actualización del badge al recibir notificación
+      if (mounted) setState(() {});
     });
 
     await _saveToken();
@@ -147,13 +150,21 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Future<void> _saveToken() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      print('❌ No se puede guardar token FCM: usuario no autenticado');
+      return;
+    }
     final token = await FirebaseMessaging.instance.getToken();
-    if (token == null) return;
+    if (token == null) {
+      print('❌ No se puede guardar token FCM: token es null');
+      return;
+    }
+    print('✅ Guardando token FCM para cliente $uid: ${token.substring(0, 20)}...');
     await FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .set({'fcmToken': token}, SetOptions(merge: true));
+    print('✅ Token FCM guardado exitosamente');
   }
 
   String _appBarTitle(BuildContext context) {
@@ -448,6 +459,21 @@ class _ClientNotificationsPanelState extends State<_ClientNotificationsPanel> {
                     const Text('Notificaciones',
                         style: TextStyle(
                             fontSize: 17, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    if (totalCount > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text('$totalCount',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold)),
+                      ),
                   ]),
                 ),
                 const SizedBox(height: 8),
@@ -605,6 +631,7 @@ class _ClientNotificationsPanelState extends State<_ClientNotificationsPanel> {
                                         d['serviceName'] ?? '';
                                     final status =
                                         d['status'] as String? ?? '';
+                                    final cancelledBy = d['cancelledBy'] as String?;
                                     final ts =
                                         (d['createdAt'] ?? d['scheduledAt'])
                                             as Timestamp?;
@@ -630,7 +657,12 @@ class _ClientNotificationsPanelState extends State<_ClientNotificationsPanel> {
                                       case 'cancelled':
                                         statusColor = Colors.orangeAccent;
                                         statusIcon = Icons.event_busy;
-                                        statusLabel = '$barberName canceló la cita';
+                                        // Verificar quién canceló la cita
+                                        if (cancelledBy == widget.clientUid) {
+                                          statusLabel = 'Haz cancelado la cita';
+                                        } else {
+                                          statusLabel = '$barberName canceló la cita';
+                                        }
                                         break;
                                       default:
                                         statusColor =

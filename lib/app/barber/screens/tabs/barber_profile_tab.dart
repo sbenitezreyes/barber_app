@@ -8,6 +8,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../shared/splash_screen.dart';
+import '../../../client/screens/welcome_dialog.dart';
 import '../edit_profile_screen.dart';
 
 class BarberProfileTab extends StatefulWidget {
@@ -218,6 +219,7 @@ class _BarberProfileTabState extends State<BarberProfileTab> {
             labelColor: Colors.redAccent,
             onTap: () async {
               await FirebaseAuth.instance.signOut();
+              await WelcomeDialog.reset();
               if (!context.mounted) return;
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const SplashScreen()),

@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../barber_profile_sheet.dart';
 
@@ -55,7 +56,7 @@ class _HomeTabState extends State<HomeTab> {
     final status = await Permission.location.request();
     if (mounted) setState(() => _locationGranted = status.isGranted);
     
-    // Centrar mapa en ubicación del usuario
+    // Si se otorga el permiso, centrar en la ubicación del usuario
     if (status.isGranted) {
       _centerOnUserLocation();
     }
@@ -64,15 +65,16 @@ class _HomeTabState extends State<HomeTab> {
   Future<void> _centerOnUserLocation() async {
     if (_mapController == null) return;
     try {
-      final location = await _mapController!.getLatLng(
-        ScreenCoordinate(x: 0, y: 0),
+      // Obtener la ubicación actual del usuario
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
       );
-      // Esperar un poco para que myLocation esté disponible
-      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Centrar la cámara en la ubicación del usuario
       _mapController!.animateCamera(
         CameraUpdate.newCameraPosition(
-          const CameraPosition(
-            target: _initialPosition,
+          CameraPosition(
+            target: LatLng(position.latitude, position.longitude),
             zoom: 15,
           ),
         ),

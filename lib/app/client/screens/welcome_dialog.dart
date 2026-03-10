@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-/// Diálogo de bienvenida que se muestra solo la primera vez que se abre la app
+import '../../shared/auth/auth_screen.dart';
+
+/// Diálogo de bienvenida que se muestra cuando el usuario es invitado
 class WelcomeDialog extends StatelessWidget {
   const WelcomeDialog({super.key});
 
-  static const String _prefsKey = 'has_seen_welcome_dialog';
+  static const String _prefsKey = 'has_seen_welcome_dialog_for_guest';
 
-  /// Verifica si se debe mostrar el diálogo y lo muestra si es necesario
+  /// Verifica si el usuario es invitado y muestra el diálogo si es necesario
   static Future<void> showIfFirstTime(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final isGuest = user == null || user.isAnonymous;
+
+    // Solo mostrar si es invitado
+    if (!isGuest) return;
+
     final prefs = await SharedPreferences.getInstance();
     final hasSeenDialog = prefs.getBool(_prefsKey) ?? false;
 
@@ -20,6 +29,12 @@ class WelcomeDialog extends StatelessWidget {
       );
       await prefs.setBool(_prefsKey, true);
     }
+  }
+
+  /// Reinicia el estado del diálogo (útil cuando el usuario cierra sesión)
+  static Future<void> reset() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsKey);
   }
 
   @override
@@ -155,6 +170,37 @@ class WelcomeDialog extends StatelessWidget {
                 ),
                 child: const Text(
                   'Comenzar',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Botón de iniciar sesión
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Cerrar el diálogo
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AuthScreen(),
+                    ),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.primary,
+                  side: BorderSide(color: theme.colorScheme.primary),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Iniciar sesión',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Background message handler (top-level, required by FCM) ────
 @pragma('vm:entry-point')
@@ -11,6 +12,18 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Firebase is already initialized by the app entry point.
   // Nothing extra needed here; FCM shows the notification automatically
   // when the app is in background/terminated.
+  print('📲 [Barbero BACKGROUND] Mensaje recibido: ${message.notification?.title}');
+  print('📲 [Barbero BACKGROUND] Datos: ${message.data}');
+  
+  // Señalizar que hay una nueva notificación para que el badge se actualice
+  // cuando la app vuelva a foreground
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hasNewNotification', true);
+    print('✅ [Barbero BACKGROUND] Marcada nueva notificación');
+  } catch (e) {
+    print('❌ [Barbero BACKGROUND] Error guardando flag: $e');
+  }
 }
 
 // ── Android notification channel ────────────────────────────────
@@ -51,14 +64,19 @@ class FcmService {
 
     // 2. Request permission (iOS / Android 13+)
     try {
-      await _messaging.requestPermission(
+      print('🔔 [Barbero] Solicitando permisos de notificación...');
+      final settings = await _messaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
+      print('✅ [Barbero] Permisos otorgados: ${settings.authorizationStatus}');
     } catch (e) {
       // Ignorar si ya hay una solicitud en curso (ocurre en hot restart)
-      if (!e.toString().contains('already running')) rethrow;
+      if (!e.toString().contains('already running')) {
+        print('❌ [Barbero] Error solicitando permisos: $e');
+        rethrow;
+      }
     }
 
     // 3. Create Android channel
@@ -76,10 +94,20 @@ class FcmService {
 
     // 5. Save / refresh FCM token in Firestore
     await _saveToken();
-    _messaging.onTokenRefresh.listen((_) => _saveToken());
+    _messaging.onTokenRefresh.listen((newToken) {
+      print('🔄 [Barbero] Token FCM renovado: ${newToken.substring(0, 20)}...');
+      _saveToken();
+    });
 
     // 6. Handle foreground messages (show local notification)
-    FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+    print('👂 [Barbero] Configurando listener para mensajes en foreground...');
+    FirebaseMessaging.onMessage.listen((msg) {
+      print('📲 [Barbero FOREGROUND] Mensaje recibido!');
+      print('📲 [Barbero] Título: ${msg.notification?.title}');
+      print('📲 [Barbero] Cuerpo: ${msg.notification?.body}');
+      print('📲 [Barbero] Datos: ${msg.data}');
+      _showForegroundNotification(msg);
+    });
 
     // 7. Handle tap on notification when app was in background
     FirebaseMessaging.onMessageOpenedApp.listen((msg) {
@@ -96,19 +124,48 @@ class FcmService {
   // ── Save FCM token ─────────────────────────────────────────
   Future<void> _saveToken() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      print('❌ [Barbero] No se puede guardar token FCM: usuario no autenticado');
+      return;
+    }
     final token = await _messaging.getToken();
-    if (token == null) return;
+    if (token == null) {
+      print('❌ [Barbero] No se puede guardar token FCM: token es null');
+      return;
+    }
+    print('✅ [Barbero] Token FCM actual en dispositivo: ${token.substring(0, 20)}...');
+    
+    // Verificar token guardado en Firestore
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    
+    final savedToken = userDoc.data()?['fcmToken'] as String?;
+    if (savedToken != null) {
+      print('📋 [Barbero] Token guardado en Firestore: ${savedToken.substring(0, 20)}...');
+      if (savedToken == token) {
+        print('✅ [Barbero] Tokens coinciden - OK');
+      } else {
+        print('⚠️ [Barbero] Tokens NO coinciden - actualizando...');
+      }
+    } else {
+      print('⚠️ [Barbero] No hay token guardado en Firestore - guardando por primera vez...');
+    }
+    
     await FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .set({'fcmToken': token}, SetOptions(merge: true));
+    print('✅ [Barbero] Token FCM guardado exitosamente en Firestore');
   }
 
   // ── Show local notification while app is foreground ────────
   Future<void> _showForegroundNotification(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
+
+    print('📲 [Barbero] Notificación recibida en foreground: ${notification.title}');
 
     await _localNotifications.show(
       notification.hashCode,
@@ -127,6 +184,16 @@ class FcmService {
       ),
       payload: jsonEncode(message.data),
     );
+    
+    // Limpiar cualquier flag de background
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hasNewNotification', false);
+    } catch (_) {}
+    
+    // Notificar al BarberHomeScreen para que actualice el badge
+    print('🔔 [Barbero] Disparando evento para refrescar badge');
+    notificationReceived.value = !notificationReceived.value;
   }
 
   // ── Navigate to Agenda tab when notification tapped ────────
@@ -138,3 +205,6 @@ class FcmService {
 
 /// Listened to by BarberHomeScreen to switch to the Agenda tab.
 final ValueNotifier<bool> scheduleTabRequested = ValueNotifier(false);
+
+/// Listened to by BarberHomeScreen to refresh the notification badge.
+final ValueNotifier<bool> notificationReceived = ValueNotifier(false);

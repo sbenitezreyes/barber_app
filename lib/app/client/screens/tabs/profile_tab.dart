@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../shared/splash_screen.dart';
 import '../../../shared/guest_auth_prompt.dart';
+import '../welcome_dialog.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
@@ -102,6 +103,7 @@ class ProfileTab extends StatelessWidget {
             labelColor: Colors.redAccent,
             onTap: () async {
               await FirebaseAuth.instance.signOut();
+              await WelcomeDialog.reset();
               if (!context.mounted) return;
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const SplashScreen()),

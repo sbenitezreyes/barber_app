@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' show asin, cos, pi, sin, sqrt;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -79,7 +80,10 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
       await FirebaseFirestore.instance
         .collection('appointments')
         .doc(widget.appointmentId)
-        .update({'status': 'cancelled'});
+        .update({
+          'status': 'cancelled',
+          'cancelledBy': FirebaseAuth.instance.currentUser?.uid,
+        });
     if (mounted) {
       // Vuelve al inicio (pop hasta la raiz)
       Navigator.of(context).popUntil((route) => route.isFirst);
