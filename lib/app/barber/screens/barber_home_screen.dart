@@ -4,8 +4,11 @@ import 'dart:math' show asin, cos, pi, sin, sqrt;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../shared/theme/app_theme.dart';
 import '../services/fcm_service.dart';
 import '../services/gps_service.dart';
 import 'client_route_screen.dart';
@@ -243,29 +246,37 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> with WidgetsBinding
     BarberProfileTab(),
   ];
 
-  String _appBarTitle() {
-    if (_currentIndex == 0) {
-      final fullName =
-          FirebaseAuth.instance.currentUser?.displayName ?? 'Barbero';
-      final firstName = fullName.split(' ').first;
-      return 'Hola, $firstName';
-    }
-    return _tabTitles[_currentIndex - 1];
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final firstName = (FirebaseAuth.instance.currentUser?.displayName ?? 'Barbero').split(' ').first;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(_appBarTitle()),
+        backgroundColor: AppColors.background,
+        title: _currentIndex == 0
+            ? RichText(
+                text: TextSpan(children: [
+                  TextSpan(
+                    text: 'Hola, ',
+                    style: GoogleFonts.figtree(fontSize: 18, fontWeight: FontWeight.w400, color: AppColors.textSecondary),
+                  ),
+                  TextSpan(
+                    text: firstName,
+                    style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                  ),
+                ]),
+              )
+            : Text(
+                _tabTitles[_currentIndex - 1],
+                style: GoogleFonts.figtree(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+              ),
         centerTitle: _currentIndex != 0,
         actions: [
-          // Botón de historial (solo visible en la pestaña Agenda)
           if (_currentIndex == 1)
             IconButton(
-              icon: const Icon(Icons.history),
+              icon: const Icon(Icons.history_rounded, size: 22),
+              color: AppColors.textSecondary,
               onPressed: () => _openHistoryPanel(context),
               tooltip: 'Ver historial',
             ),
@@ -276,28 +287,20 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> with WidgetsBinding
               return Stack(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.notifications_outlined),
+                    icon: const Icon(Icons.notifications_outlined, size: 22),
+                    color: AppColors.textPrimary,
                     onPressed: () => _openNotificationsPanel(context),
                   ),
                   if (count > 0)
                     Positioned(
-                      right: 8,
-                      top: 8,
+                      right: 10,
+                      top: 10,
                       child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: AppColors.error,
                           shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            '$count',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold),
-                          ),
                         ),
                       ),
                     ),
@@ -305,11 +308,11 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> with WidgetsBinding
               );
             },
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
         children: [
-          // Banner: retomar ruta activa si el barb volvio a abrir la app
           StreamBuilder<List<QueryDocumentSnapshot>>(
             stream: _activeRouteStream,
             builder: (context, snap) {
@@ -320,17 +323,11 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> with WidgetsBinding
               final clientName = d['clientName'] as String? ?? 'Cliente';
               final clientLat = (d['clientLat'] as num?)?.toDouble();
               final clientLng = (d['clientLng'] as num?)?.toDouble();
-              // Si el cliente no compartíó GPS el botón se muestra de todas formas
-              // pero solo abre el mapa si hay coordenadas
               return _ActiveRouteBanner(
                 clientName: clientName,
                 onTap: clientLat == null || clientLng == null
                     ? () => ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                                'El cliente no compartió su ubicación GPS'),
-                            duration: Duration(seconds: 3),
-                          ),
+                          const SnackBar(content: Text('El cliente no compartió su ubicación GPS')),
                         )
                     : () => Navigator.of(context).push(MaterialPageRoute(
                           builder: (_) => ClientRouteScreen(
@@ -344,10 +341,9 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> with WidgetsBinding
                   final ok = await showDialog<bool>(
                     context: context,
                     builder: (_) => AlertDialog(
-                      backgroundColor: const Color(0xFF18181C),
-                      title: const Text('Cancelar cita'),
-                      content: Text(
-                          '¿Cancelar la cita con $clientName?'),
+                      backgroundColor: AppColors.surfaceElevated,
+                      title: Text('Cancelar cita', style: AppTextStyles.title),
+                      content: Text('¿Cancelar la cita con $clientName?', style: AppTextStyles.body),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
@@ -355,9 +351,7 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> with WidgetsBinding
                         ),
                         TextButton(
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Sí, cancelar',
-                              style:
-                                  TextStyle(color: Colors.redAccent)),
+                          child: Text('Sí, cancelar', style: AppTextStyles.button.copyWith(color: AppColors.error)),
                         ),
                       ],
                     ),
@@ -382,35 +376,36 @@ class _BarberHomeScreenState extends State<BarberHomeScreen> with WidgetsBinding
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: const Color(0xFF111217),
-        selectedItemColor: theme.colorScheme.primary,
-        unselectedItemColor: Colors.grey[600],
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map_outlined),
-            activeIcon: Icon(Icons.map),
-            label: 'Mapa',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_outlined),
-            activeIcon: Icon(Icons.calendar_today),
-            label: 'Agenda',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
-            label: 'Configuración',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: 'Perfil',
-          ),
-        ],
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (i) => setState(() => _currentIndex = i),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.map_outlined),
+              selectedIcon: Icon(Icons.map_rounded),
+              label: 'Mapa',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.calendar_month_outlined),
+              selectedIcon: Icon(Icons.calendar_month_rounded),
+              label: 'Agenda',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.tune_outlined),
+              selectedIcon: Icon(Icons.tune_rounded),
+              label: 'Configuración',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline_rounded),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: 'Perfil',
+            ),
+          ],
+        ),
       ),
     );
   }

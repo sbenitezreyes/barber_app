@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../shared/app_config.dart';
 import '../shared/splash_screen.dart';
+import '../shared/theme/app_theme.dart';
 
 class ClientApp extends StatelessWidget {
   const ClientApp({super.key});
@@ -14,16 +15,7 @@ class ClientApp extends StatelessWidget {
       title: 'YaCut - Cliente',
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       supportedLocales: const [Locale('es', 'ES'), Locale('en', 'US')],
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        primaryColor: const Color(0xFF0CBCCC),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0CBCCC),
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xFF050814),
-        fontFamily: 'Roboto',
-      ),
+      theme: buildAppTheme(),
       builder: (context, child) {
         return AppConfig(
           appType: AppType.client,

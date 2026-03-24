@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../app_config.dart';
+import '../theme/app_theme.dart';
 import 'google_auth_service.dart';
 import 'navigate_to_home.dart';
 import 'terms_screen.dart';
 
 class RegisterForm extends StatefulWidget {
   final bool returnAfterAuth;
-  
+
   const RegisterForm({super.key, this.returnAfterAuth = false});
 
   @override
@@ -38,7 +40,6 @@ class _RegisterFormState extends State<RegisterForm> {
 
   Future<void> _saveUserProfile(User user, AppType appType) async {
     final role = appType == AppType.client ? 'client' : 'barber';
-
     await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
       {
         'name': _nameController.text.trim(),
@@ -53,7 +54,7 @@ class _RegisterFormState extends State<RegisterForm> {
   Future<void> _signInWithGoogle(BuildContext context) async {
     try {
       final credential = await GoogleAuthService.signInWithGoogle();
-      if (credential == null) return; // usuario canceló
+      if (credential == null) return;
       if (!context.mounted) return;
       navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } catch (e) {
@@ -72,38 +73,21 @@ class _RegisterFormState extends State<RegisterForm> {
       );
       return;
     }
-
     setState(() => _isLoading = true);
-
     try {
       final appConfig = AppConfig.of(context);
-
-      final credential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
+      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-
       await credential.user?.updateDisplayName(_nameController.text.trim());
-
       final user = credential.user;
-      if (user != null) {
-        await _saveUserProfile(user, appConfig.appType);
-      }
-
-      try {
-        await credential.user?.sendEmailVerification();
-      } catch (_) {}
-
+      if (user != null) await _saveUserProfile(user, appConfig.appType);
+      try { await credential.user?.sendEmailVerification(); } catch (_) {}
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Cuenta creada con éxito. Revisa tu correo para verificarla.',
-          ),
-        ),
+        const SnackBar(content: Text('Cuenta creada. Revisa tu correo para verificarla.')),
       );
-
       navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } on FirebaseAuthException catch (e) {
       String message;
@@ -116,9 +100,7 @@ class _RegisterFormState extends State<RegisterForm> {
       } else {
         message = 'Error: ${e.message}';
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -127,6 +109,7 @@ class _RegisterFormState extends State<RegisterForm> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(28, 4, 28, 28),
       child: Form(
         key: _formKey,
         child: Column(
@@ -134,17 +117,14 @@ class _RegisterFormState extends State<RegisterForm> {
           children: [
             TextFormField(
               controller: _nameController,
+              style: GoogleFonts.figtree(fontSize: 14, color: AppColors.textPrimary),
               decoration: const InputDecoration(
                 labelText: 'Nombre completo',
-                prefixIcon: Icon(Icons.person_outline),
+                prefixIcon: Icon(Icons.person_outline_rounded, size: 20),
               ),
-              validator: (value) { 
-                if (value == null || value.isEmpty) {
-                  return 'Ingresa tu nombre';
-                }
-                if (value.length < 3) {
-                  return 'Nombre muy corto';
-                }
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Ingresa tu nombre';
+                if (v.length < 3) return 'Nombre muy corto';
                 return null;
               },
             ),
@@ -152,17 +132,14 @@ class _RegisterFormState extends State<RegisterForm> {
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
+              style: GoogleFonts.figtree(fontSize: 14, color: AppColors.textPrimary),
               decoration: const InputDecoration(
                 labelText: 'Correo electrónico',
-                prefixIcon: Icon(Icons.email_outlined),
+                prefixIcon: Icon(Icons.mail_outline_rounded, size: 20),
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Ingresa tu correo';
-                }
-                if (!value.contains('@')) {
-                  return 'Correo no válido';
-                }
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Ingresa tu correo';
+                if (!v.contains('@')) return 'Correo no válido';
                 return null;
               },
             ),
@@ -170,23 +147,22 @@ class _RegisterFormState extends State<RegisterForm> {
             TextFormField(
               controller: _passwordController,
               obscureText: _obscurePassword,
+              style: GoogleFonts.figtree(fontSize: 14, color: AppColors.textPrimary),
               decoration: InputDecoration(
                 labelText: 'Contraseña',
-                prefixIcon: const Icon(Icons.lock_outline),
+                prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    size: 20,
+                    color: AppColors.textTertiary,
                   ),
                   onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                 ),
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Crea una contraseña';
-                }
-                if (value.length < 6) {
-                  return 'Mínimo 6 caracteres';
-                }
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Crea una contraseña';
+                if (v.length < 6) return 'Mínimo 6 caracteres';
                 return null;
               },
             ),
@@ -194,46 +170,53 @@ class _RegisterFormState extends State<RegisterForm> {
             TextFormField(
               controller: _confirmPasswordController,
               obscureText: _obscureConfirm,
+              style: GoogleFonts.figtree(fontSize: 14, color: AppColors.textPrimary),
               decoration: InputDecoration(
                 labelText: 'Confirmar contraseña',
-                prefixIcon: const Icon(Icons.lock_outline),
+                prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                    _obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    size: 20,
+                    color: AppColors.textTertiary,
                   ),
                   onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
                 ),
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Confirma tu contraseña';
-                }
-                if (value != _passwordController.text) {
-                  return 'Las contraseñas no coinciden';
-                }
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Confirma tu contraseña';
+                if (v != _passwordController.text) return 'Las contraseñas no coinciden';
                 return null;
               },
             ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Checkbox(
-                  value: _acceptTerms,
-                  onChanged: (value) {
-                    setState(() => _acceptTerms = value ?? false);
-                  },
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {},
+            const SizedBox(height: 16),
+
+            // Términos
+            GestureDetector(
+              onTap: () => setState(() => _acceptTerms = !_acceptTerms),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(5),
+                      color: _acceptTerms ? AppColors.gold : Colors.transparent,
+                      border: Border.all(
+                        color: _acceptTerms ? AppColors.gold : AppColors.borderMedium,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: _acceptTerms
+                        ? const Icon(Icons.check_rounded, size: 14, color: AppColors.background)
+                        : null,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
                     child: RichText(
                       text: TextSpan(
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          height: 1.4,
-                        ),
+                        style: GoogleFonts.figtree(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
                         children: [
                           const TextSpan(text: 'Acepto los '),
                           WidgetSpan(
@@ -242,62 +225,70 @@ class _RegisterFormState extends State<RegisterForm> {
                             child: GestureDetector(
                               onTap: () => Navigator.push(
                                 context,
-                                MaterialPageRoute(
-                                  builder: (_) => const TermsScreen(),
-                                ),
+                                MaterialPageRoute(builder: (_) => const TermsScreen()),
                               ),
-                              child: const Text(
+                              child: Text(
                                 'términos y condiciones',
-                                style: TextStyle(
-                                  color: Color(0xFFE94560),
+                                style: GoogleFonts.figtree(
                                   fontSize: 13,
+                                  color: AppColors.gold,
                                   decoration: TextDecoration.underline,
-                                  decorationColor: Color(0xFFE94560),
+                                  decorationColor: AppColors.gold,
                                 ),
                               ),
                             ),
-                          ),
-                          const TextSpan(
-                            text: ' y la política de privacidad de YaCut.',
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
+
+            const SizedBox(height: 20),
+
+            // Botón crear cuenta
             SizedBox(
-              height: 48,
+              height: 52,
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
                 child: _isLoading
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.background),
                       )
-                    : const Text('Crear cuenta'),
+                    : Text('Crear cuenta', style: AppTextStyles.button),
               ),
             ),
+
+            const SizedBox(height: 20),
+
+            Row(children: [
+              const Expanded(child: Divider(color: AppColors.borderMedium)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Text('o', style: AppTextStyles.caption),
+              ),
+              const Expanded(child: Divider(color: AppColors.borderMedium)),
+            ]),
+
             const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: () => _signInWithGoogle(context),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: BorderSide(color: Colors.grey[700]!),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+
+            SizedBox(
+              height: 52,
+              child: OutlinedButton(
+                onPressed: () => _signInWithGoogle(context),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('G', style: GoogleFonts.roboto(fontSize: 18, fontWeight: FontWeight.w700, color: const Color(0xFF4285F4))),
+                    const SizedBox(width: 10),
+                    Text('Registrarme con Google', style: AppTextStyles.button.copyWith(color: AppColors.textPrimary)),
+                  ],
                 ),
               ),
-              icon: const Icon(Icons.g_mobiledata_rounded, size: 32),
-              label: const Text('Registrarme con Google'),
             ),
           ],
         ),

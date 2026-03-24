@@ -1,8 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'app_config.dart';
 import 'auth/auth_screen.dart';
+import 'theme/app_theme.dart';
 import '../client/screens/client_home_screen.dart';
 import '../barber/screens/barber_home_screen.dart';
 
@@ -13,27 +15,41 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
+  late final Animation<double> _lineExpand;
+
   @override
   void initState() {
     super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+
+    _fade = CurvedAnimation(parent: _ctrl, curve: const Interval(0.0, 0.6, curve: Curves.easeOut));
+    _slide = Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _ctrl, curve: const Interval(0.0, 0.65, curve: Curves.easeOutCubic)));
+    _lineExpand = CurvedAnimation(parent: _ctrl, curve: const Interval(0.55, 1.0, curve: Curves.easeOut));
+
+    _ctrl.forward();
     _goToAuth();
   }
 
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _goToAuth() async {
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(milliseconds: 2400));
     if (!mounted) return;
 
     final config = AppConfig.of(context);
     final user = FirebaseAuth.instance.currentUser;
-    
-    print('🔍 SplashScreen - Usuario actual: ${user?.uid ?? 'null'}');
-    print('🔍 SplashScreen - Es anónimo: ${user?.isAnonymous ?? 'N/A'}');
-    print('🔍 SplashScreen - Es cliente: ${config.isClient}');
-    
+
     if (user != null && !user.isAnonymous) {
-      // Sesión activa de usuario real: ir directo al home
-      print('✅ Usuario real detectado, ir a home');
       final Widget home = config.isClient
           ? const ClientHomeScreen()
           : const BarberHomeScreen();
@@ -41,27 +57,20 @@ class _SplashScreenState extends State<SplashScreen> {
         MaterialPageRoute(builder: (_) => home),
       );
     } else {
-      // Si es cliente y no hay usuario (o es anónimo cadcucado), hacer login anónimo
       if (config.isClient) {
         try {
-          print('🔐 Intentando login anónimo...');
-          final userCredential = await FirebaseAuth.instance.signInAnonymously();
-          print('✅ Login anónimo exitoso: ${userCredential.user?.uid}');
+          await FirebaseAuth.instance.signInAnonymously();
           if (!mounted) return;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const ClientHomeScreen()),
           );
-        } catch (e) {
-          // Si falla el login anónimo, ir a AuthScreen
-          print('❌ Error en login anónimo: $e');
+        } catch (_) {
           if (!mounted) return;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const AuthScreen()),
           );
         }
       } else {
-        // Para barberos, siempre ir a AuthScreen
-        print('👨‍💼 Barbero detectado, ir a AuthScreen');
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const AuthScreen()),
         );
@@ -71,98 +80,181 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final config = AppConfig.of(context);
     final isClient = config.isClient;
 
-    final subtitle = isClient
-        ? 'Pide tu barbero a domicilio en minutos.'
-        : 'Gestiona tus citas y haz crecer tu negocio.';
-    final icon = isClient ? Icons.content_cut : Icons.work_outline;
-
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isClient
-                ? [const Color(0xFF15297C), const Color(0xFF0CBCCC)]
-                : [const Color(0xFF1A1A2E), const Color(0xFF16213E)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: theme.colorScheme.primary,
-                    width: 3,
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black54,
-                      blurRadius: 16,
-                      offset: Offset(0, 8),
-                    ),
+      backgroundColor: AppColors.background,
+      body: Stack(
+        children: [
+          // Fondo atmosférico — círculo de luz sutil
+          Positioned(
+            top: -120,
+            left: -80,
+            child: Container(
+              width: 420,
+              height: 420,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    (isClient ? AppColors.gold : AppColors.teal).withValues(alpha: 0.08),
+                    Colors.transparent,
                   ],
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF212226), Color(0xFF111217)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Icon(
-                  icon,
-                  size: 36,
-                  color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Bienvenido a YaCut',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              if (!isClient)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'MODO BARBERO',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                      color: Colors.white70,
-                    ),
-                  ),
-                ),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[400],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+            ),
           ),
-        ),
+          Positioned(
+            bottom: -100,
+            right: -60,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.gold.withValues(alpha: 0.05),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Contenido central
+          Center(
+            child: SlideTransition(
+              position: _slide,
+              child: FadeTransition(
+                opacity: _fade,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Icono — círculo con borde gold
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.surface,
+                          border: Border.all(
+                            color: isClient ? AppColors.gold : AppColors.teal,
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (isClient ? AppColors.gold : AppColors.teal)
+                                  .withValues(alpha: 0.20),
+                              blurRadius: 24,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          isClient ? Icons.content_cut_rounded : Icons.work_outline_rounded,
+                          size: 34,
+                          color: isClient ? AppColors.gold : AppColors.teal,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+
+                      // Marca — serif display
+                      Text(
+                        'YaCut',
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 42,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                          letterSpacing: 1,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Línea decorativa animada
+                      AnimatedBuilder(
+                        animation: _lineExpand,
+                        builder: (_, __) => Container(
+                          height: 1,
+                          width: 80 * _lineExpand.value,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.transparent,
+                                isClient ? AppColors.gold : AppColors.teal,
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Modo badge — solo para barbero
+                      if (!isClient)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.teal.withValues(alpha: 0.4)),
+                            borderRadius: BorderRadius.circular(100),
+                            color: AppColors.tealSubtle,
+                          ),
+                          child: Text(
+                            'MODO BARBERO',
+                            style: GoogleFonts.figtree(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 2,
+                              color: AppColors.teal,
+                            ),
+                          ),
+                        ),
+                      if (!isClient) const SizedBox(height: 10),
+
+                      // Tagline
+                      Text(
+                        isClient
+                            ? 'Tu barbero, donde estés.'
+                            : 'Gestiona tus citas con estilo.',
+                        style: GoogleFonts.figtree(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 0.3,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Indicador de carga — parte inferior
+          Positioned(
+            bottom: 52,
+            left: 0,
+            right: 0,
+            child: FadeTransition(
+              opacity: _lineExpand,
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: (isClient ? AppColors.gold : AppColors.teal).withValues(alpha: 0.6),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

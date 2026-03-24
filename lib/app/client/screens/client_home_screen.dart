@@ -3,7 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../shared/theme/app_theme.dart';
 
 import 'barber_tracking_screen.dart';
 import 'tabs/home_tab.dart';
@@ -167,22 +170,46 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     print('✅ Token FCM guardado exitosamente');
   }
 
-  String _appBarTitle(BuildContext context) {
-    if (_currentIndex == 0) {
-      final fullName = FirebaseAuth.instance.currentUser?.displayName ?? 'Cliente';
-      final firstName = fullName.split(' ').first;
-      return 'Hola, $firstName';
-    }
-    return _titles[_currentIndex - 1];
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(_appBarTitle(context)),
+        backgroundColor: AppColors.background,
+        title: _currentIndex == 0
+            ? RichText(
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Hola, ',
+                      style: GoogleFonts.figtree(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    TextSpan(
+                      text: () {
+                        final full = FirebaseAuth.instance.currentUser?.displayName ?? 'Cliente';
+                        return full.split(' ').first;
+                      }(),
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : Text(
+                _titles[_currentIndex - 1],
+                style: GoogleFonts.figtree(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
         centerTitle: _currentIndex != 0,
         actions: [
           if (_currentIndex == 0)
@@ -195,24 +222,20 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 return Stack(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.notifications_outlined),
+                      icon: const Icon(Icons.notifications_outlined, size: 22),
+                      color: AppColors.textPrimary,
                       onPressed: _openNotificationsPanel,
                     ),
                     if (count > 0)
                       Positioned(
-                        right: 8,
-                        top: 8,
+                        right: 10,
+                        top: 10,
                         child: Container(
-                          padding: const EdgeInsets.all(3),
+                          width: 8,
+                          height: 8,
                           decoration: const BoxDecoration(
-                            color: Colors.red,
+                            color: AppColors.error,
                             shape: BoxShape.circle,
-                          ),
-                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                          child: Text(
-                            '$count',
-                            style: const TextStyle(color: Colors.white, fontSize: 10),
-                            textAlign: TextAlign.center,
                           ),
                         ),
                       ),
@@ -220,17 +243,16 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 );
               },
             ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
         children: [
-          // Banner en vivo: tu barbero está en camino
+          // Banner en vivo
           StreamBuilder<QuerySnapshot>(
             stream: _trackingStream,
             builder: (context, snap) {
               if (!snap.hasData) return const SizedBox.shrink();
-              // Buscar cita inmediata confirmada (status confirmed + isImmediate)
-              // No esperamos barberCurrentLat - aparece inmediatamente cuando el barbero acepta
               final activeDocs = snap.data!.docs.where((d) {
                 final data = d.data() as Map<String, dynamic>;
                 return data['isImmediate'] == true;
@@ -258,35 +280,36 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: const Color(0xFF111217),
-        selectedItemColor: theme.colorScheme.primary,
-        unselectedItemColor: Colors.grey[600],
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home_filled),
-            label: 'Inicio',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.star_outline),
-            activeIcon: Icon(Icons.star),
-            label: 'Favoritos',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_outlined),
-            activeIcon: Icon(Icons.calendar_today),
-            label: 'Citas',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: 'Perfil',
-          ),
-        ],
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (i) => setState(() => _currentIndex = i),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.map_outlined),
+              selectedIcon: Icon(Icons.map_rounded),
+              label: 'Mapa',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.star_outline_rounded),
+              selectedIcon: Icon(Icons.star_rounded),
+              label: 'Favoritos',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.calendar_month_outlined),
+              selectedIcon: Icon(Icons.calendar_month_rounded),
+              label: 'Citas',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline_rounded),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: 'Perfil',
+            ),
+          ],
+        ),
       ),
     );
   }

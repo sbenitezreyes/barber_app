@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../app_config.dart';
+import '../theme/app_theme.dart';
 import 'google_auth_service.dart';
 import 'navigate_to_home.dart';
 
 class LoginForm extends StatefulWidget {
   final bool returnAfterAuth;
-  
+
   const LoginForm({super.key, this.returnAfterAuth = false});
 
   @override
@@ -20,6 +22,7 @@ class _LoginFormState extends State<LoginForm> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -31,7 +34,7 @@ class _LoginFormState extends State<LoginForm> {
   Future<void> _signInWithGoogle(BuildContext context) async {
     try {
       final credential = await GoogleAuthService.signInWithGoogle();
-      if (credential == null) return; // usuario canceló
+      if (credential == null) return;
       if (!context.mounted) return;
       navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } catch (e) {
@@ -42,24 +45,17 @@ class _LoginFormState extends State<LoginForm> {
     }
   }
 
-  /// Agrega el rol de la app actual al usuario si aún no lo tiene.
   Future<void> _ensureRoleExists(User user) async {
     final appConfig = AppConfig.of(context);
     final role = appConfig.isClient ? 'client' : 'barber';
-
     final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
     final doc = await docRef.get();
-
     if (doc.exists) {
       final roles = List<String>.from(doc.data()?['role'] ?? []);
       if (!roles.contains(role)) {
-        // Agregar el nuevo rol al arreglo existente
-        await docRef.update({
-          'role': FieldValue.arrayUnion([role]),
-        });
+        await docRef.update({'role': FieldValue.arrayUnion([role])});
       }
     } else {
-      // El usuario no tiene perfil en Firestore (registro externo), crearlo
       await docRef.set({
         'email': user.email,
         'name': user.displayName ?? '',
@@ -72,18 +68,12 @@ class _LoginFormState extends State<LoginForm> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-
     try {
       final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-
-      // Asegurar que el rol de esta app esté en Firestore
-      if (credential.user != null) {
-        await _ensureRoleExists(credential.user!);
-      }
-
+      if (credential.user != null) await _ensureRoleExists(credential.user!);
       if (!mounted) return;
       navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } on FirebaseAuthException catch (e) {
@@ -105,106 +95,133 @@ class _LoginFormState extends State<LoginForm> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(28, 4, 28, 28),
       child: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Email
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
+              style: GoogleFonts.figtree(fontSize: 14, color: AppColors.textPrimary),
               decoration: const InputDecoration(
                 labelText: 'Correo electrónico',
-                prefixIcon: Icon(Icons.email_outlined),
+                prefixIcon: Icon(Icons.mail_outline_rounded, size: 20),
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Ingresa tu correo';
-                }
-                if (!value.contains('@')) {
-                  return 'Correo no válido';
-                }
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Ingresa tu correo';
+                if (!v.contains('@')) return 'Correo no válido';
                 return null;
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+
+            // Contraseña
             TextFormField(
               controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
+              obscureText: _obscurePassword,
+              style: GoogleFonts.figtree(fontSize: 14, color: AppColors.textPrimary),
+              decoration: InputDecoration(
                 labelText: 'Contraseña',
-                prefixIcon: Icon(Icons.lock_outline),
+                prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    size: 20,
+                    color: AppColors.textTertiary,
+                  ),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                ),
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Ingresa tu contraseña';
-                }
-                if (value.length < 6) {
-                  return 'Mínimo 6 caracteres';
-                }
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Ingresa tu contraseña';
+                if (v.length < 6) return 'Mínimo 6 caracteres';
                 return null;
               },
             ),
-            const SizedBox(height: 8),
+
+            // Olvidé contraseña
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
                 onPressed: () {},
-                child: const Text('¿Olvidaste tu contraseña?'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+                ),
+                child: Text(
+                  '¿Olvidaste tu contraseña?',
+                  style: GoogleFonts.figtree(fontSize: 13, color: AppColors.textSecondary),
+                ),
               ),
             ),
-            const SizedBox(height: 8),
+
+            const SizedBox(height: 4),
+
+            // Botón principal
             SizedBox(
-              height: 48,
+              height: 52,
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
                 child: _isLoading
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.background),
                       )
-                    : const Text('Iniciar sesión'),
+                    : Text('Iniciar sesión', style: AppTextStyles.button),
               ),
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Expanded(child: Divider()),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Text(
-                    'o continúa con',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[400],
-                    ),
-                  ),
-                ),
-                const Expanded(child: Divider()),
-              ],
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: () => _signInWithGoogle(context),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: BorderSide(color: Colors.grey[700]!),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+
+            const SizedBox(height: 24),
+
+            // Divisor
+            Row(children: [
+              const Expanded(child: Divider(color: AppColors.borderMedium)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Text('o', style: AppTextStyles.caption),
+              ),
+              const Expanded(child: Divider(color: AppColors.borderMedium)),
+            ]),
+
+            const SizedBox(height: 20),
+
+            // Google
+            SizedBox(
+              height: 52,
+              child: OutlinedButton(
+                onPressed: () => _signInWithGoogle(context),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _GoogleIcon(),
+                    const SizedBox(width: 10),
+                    Text('Continuar con Google', style: AppTextStyles.button.copyWith(color: AppColors.textPrimary)),
+                  ],
                 ),
               ),
-              icon: const Icon(Icons.g_mobiledata_rounded, size: 32),
-              label: const Text('Continuar con Google'),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// Mini ícono de Google en SVG simplificado (texto)
+class _GoogleIcon extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'G',
+      style: GoogleFonts.roboto(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: const Color(0xFF4285F4),
       ),
     );
   }

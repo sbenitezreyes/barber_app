@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../app_config.dart';
+import '../theme/app_theme.dart';
 import 'login_form.dart';
 import 'register_form.dart';
 
 class AuthScreen extends StatefulWidget {
-  /// Si es true, después del login exitoso regresa en lugar de ir al home
   final bool returnAfterAuth;
-  
+
   const AuthScreen({super.key, this.returnAfterAuth = false});
 
   @override
@@ -32,129 +33,176 @@ class _AuthScreenState extends State<AuthScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final config = AppConfig.of(context);
     final isClient = config.isClient;
 
-    final subtitle = isClient
-        ? 'Pide tu barbero a domicilio en minutos.'
-        : 'Gestiona tus citas y haz crecer tu negocio.';
-    final icon = isClient ? Icons.content_cut : Icons.work_outline;
-
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Column(
-                  children: [
-                    Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: theme.colorScheme.primary,
-                          width: 3,
-                        ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black54,
-                            blurRadius: 16,
-                            offset: Offset(0, 8),
-                          ),
-                        ],
-                        gradient: LinearGradient(
-                          colors: isClient
-                              ? [const Color(0xFF15297C), const Color(0xFF0CBCCC)]
-                              : [const Color(0xFF1A1A2E), const Color(0xFF16213E)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Icon(
-                        icon,
-                        size: 36,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Bienvenido a YaCut',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    if (!isClient)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'MODO BARBERO',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ),
-                    Text(
-                      subtitle,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[400],
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+      backgroundColor: AppColors.background,
+      body: Stack(
+        children: [
+          // Halo de luz atmosférico
+          Positioned(
+            top: -80,
+            right: -60,
+            child: Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.gold.withValues(alpha: 0.07),
+                    Colors.transparent,
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF18181C),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TabBar(
-                  controller: _tabController,
-                  indicator: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: theme.colorScheme.primary,
-                  ),
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.grey[400],
-                  tabs: const [
-                    Tab(text: 'Iniciar sesión'),
-                    Tab(text: 'Registrarse'),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    LoginForm(returnAfterAuth: widget.returnAfterAuth),
-                    RegisterForm(returnAfterAuth: widget.returnAfterAuth),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 20),
+
+                // ── Header ──────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Icono pequeño + nombre marca
+                      Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.surface,
+                              border: Border.all(
+                                color: isClient ? AppColors.gold : AppColors.teal,
+                                width: 1,
+                              ),
+                            ),
+                            child: Icon(
+                              isClient ? Icons.content_cut_rounded : Icons.work_outline_rounded,
+                              size: 18,
+                              color: isClient ? AppColors.gold : AppColors.teal,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'YaCut',
+                            style: GoogleFonts.playfairDisplay(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          if (!isClient) ...[
+                            const SizedBox(width: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.tealSubtle,
+                                border: Border.all(color: AppColors.teal.withValues(alpha: 0.3)),
+                                borderRadius: BorderRadius.circular(100),
+                              ),
+                              child: Text(
+                                'BARBERO',
+                                style: GoogleFonts.figtree(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.5,
+                                  color: AppColors.teal,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+
+                      // Título editorial
+                      Text(
+                        isClient
+                            ? 'Tu barbero,\na un toque.'
+                            : 'Bienvenido\nde vuelta.',
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                          height: 1.15,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        isClient
+                            ? 'Accede para reservar con tus barberos favoritos.'
+                            : 'Gestiona tus citas y haz crecer tu negocio.',
+                        style: GoogleFonts.figtree(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 28),
+
+                // ── Tab Selector ────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: Container(
+                    height: 46,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicator: BoxDecoration(
+                        color: AppColors.gold,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      labelColor: AppColors.background,
+                      unselectedLabelColor: AppColors.textSecondary,
+                      labelStyle: GoogleFonts.figtree(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      unselectedLabelStyle: GoogleFonts.figtree(fontSize: 13),
+                      dividerColor: Colors.transparent,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      tabs: const [
+                        Tab(text: 'Iniciar sesión'),
+                        Tab(text: 'Registrarse'),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // ── Forms ───────────────────────────────────────
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      LoginForm(returnAfterAuth: widget.returnAfterAuth),
+                      RegisterForm(returnAfterAuth: widget.returnAfterAuth),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
