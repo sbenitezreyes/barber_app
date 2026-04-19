@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../app_config.dart';
 import '../theme/app_theme.dart';
@@ -39,9 +38,9 @@ class _LoginFormState extends State<LoginForm> {
       navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error con Google: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error con Google: $e')));
     }
   }
 
@@ -53,7 +52,9 @@ class _LoginFormState extends State<LoginForm> {
     if (doc.exists) {
       final roles = List<String>.from(doc.data()?['role'] ?? []);
       if (!roles.contains(role)) {
-        await docRef.update({'role': FieldValue.arrayUnion([role])});
+        await docRef.update({
+          'role': FieldValue.arrayUnion([role]),
+        });
       }
     } else {
       await docRef.set({
@@ -65,6 +66,31 @@ class _LoginFormState extends State<LoginForm> {
     }
   }
 
+  Future<void> _forgotPassword() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa tu correo primero')),
+      );
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Correo de recuperación enviado a $email')),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      final message = e.code == 'user-not-found'
+          ? 'No existe una cuenta con ese correo'
+          : 'Error: ${e.message}';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -73,7 +99,11 @@ class _LoginFormState extends State<LoginForm> {
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      if (credential.user != null) await _ensureRoleExists(credential.user!);
+      if (credential.user != null) {
+        await _ensureRoleExists(credential.user!);
+        // Hacer reload para asegurar que todos los datos estén sincronizados
+        await FirebaseAuth.instance.currentUser?.reload();
+      }
       if (!mounted) return;
       navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } on FirebaseAuthException catch (e) {
@@ -85,9 +115,9 @@ class _LoginFormState extends State<LoginForm> {
       } else {
         message = 'Error: ${e.message}';
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -106,7 +136,7 @@ class _LoginFormState extends State<LoginForm> {
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
-              style: GoogleFonts.figtree(fontSize: 14, color: AppColors.textPrimary),
+              style: AppTextStyles.ui(size: 14),
               decoration: const InputDecoration(
                 labelText: 'Correo electrónico',
                 prefixIcon: Icon(Icons.mail_outline_rounded, size: 20),
@@ -123,17 +153,20 @@ class _LoginFormState extends State<LoginForm> {
             TextFormField(
               controller: _passwordController,
               obscureText: _obscurePassword,
-              style: GoogleFonts.figtree(fontSize: 14, color: AppColors.textPrimary),
+              style: AppTextStyles.ui(size: 14),
               decoration: InputDecoration(
                 labelText: 'Contraseña',
                 prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    _obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
                     size: 20,
                     color: AppColors.textTertiary,
                   ),
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
                 ),
               ),
               validator: (v) {
@@ -147,14 +180,20 @@ class _LoginFormState extends State<LoginForm> {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: () {},
+                onPressed: _forgotPassword,
                 style: TextButton.styleFrom(
                   foregroundColor: AppColors.textSecondary,
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 0,
+                  ),
                 ),
                 child: Text(
                   '¿Olvidaste tu contraseña?',
-                  style: GoogleFonts.figtree(fontSize: 13, color: AppColors.textSecondary),
+                  style: AppTextStyles.ui(
+                    size: 13,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
             ),
@@ -170,7 +209,10 @@ class _LoginFormState extends State<LoginForm> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.background),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.background,
+                        ),
                       )
                     : Text('Iniciar sesión', style: AppTextStyles.button),
               ),
@@ -179,14 +221,16 @@ class _LoginFormState extends State<LoginForm> {
             const SizedBox(height: 24),
 
             // Divisor
-            Row(children: [
-              const Expanded(child: Divider(color: AppColors.borderMedium)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Text('o', style: AppTextStyles.caption),
-              ),
-              const Expanded(child: Divider(color: AppColors.borderMedium)),
-            ]),
+            Row(
+              children: [
+                const Expanded(child: Divider(color: AppColors.borderMedium)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Text('o', style: AppTextStyles.caption),
+                ),
+                const Expanded(child: Divider(color: AppColors.borderMedium)),
+              ],
+            ),
 
             const SizedBox(height: 20),
 
@@ -200,7 +244,12 @@ class _LoginFormState extends State<LoginForm> {
                   children: [
                     _GoogleIcon(),
                     const SizedBox(width: 10),
-                    Text('Continuar con Google', style: AppTextStyles.button.copyWith(color: AppColors.textPrimary)),
+                    Text(
+                      'Continuar con Google',
+                      style: AppTextStyles.button.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -216,12 +265,13 @@ class _LoginFormState extends State<LoginForm> {
 class _GoogleIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Text(
+    return const Text(
       'G',
-      style: GoogleFonts.roboto(
+      style: TextStyle(
+        fontFamily: 'Roboto',
         fontSize: 18,
         fontWeight: FontWeight.w700,
-        color: const Color(0xFF4285F4),
+        color: Color(0xFF4285F4),
       ),
     );
   }

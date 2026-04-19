@@ -7,11 +7,7 @@ enum AppType { client, barber }
 class AppConfig extends InheritedWidget {
   final AppType appType;
 
-  const AppConfig({
-    super.key,
-    required this.appType,
-    required super.child,
-  });
+  const AppConfig({super.key, required this.appType, required super.child});
 
   static AppConfig of(BuildContext context) {
     final config = context.dependOnInheritedWidgetOfExactType<AppConfig>();
@@ -23,6 +19,5 @@ class AppConfig extends InheritedWidget {
   bool get isBarber => appType == AppType.barber;
 
   @override
-  bool updateShouldNotify(AppConfig oldWidget) =>
-      appType != oldWidget.appType;
+  bool updateShouldNotify(AppConfig oldWidget) => appType != oldWidget.appType;
 }

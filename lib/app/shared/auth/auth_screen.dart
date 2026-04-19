@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../app_config.dart';
 import '../theme/app_theme.dart';
@@ -81,42 +80,43 @@ class _AuthScreenState extends State<AuthScreen>
                               shape: BoxShape.circle,
                               color: AppColors.surface,
                               border: Border.all(
-                                color: isClient ? AppColors.gold : AppColors.teal,
+                                color: isClient
+                                    ? AppColors.gold
+                                    : AppColors.teal,
                                 width: 1,
                               ),
                             ),
                             child: Icon(
-                              isClient ? Icons.content_cut_rounded : Icons.work_outline_rounded,
+                              isClient
+                                  ? Icons.content_cut_rounded
+                                  : Icons.work_outline_rounded,
                               size: 18,
                               color: isClient ? AppColors.gold : AppColors.teal,
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Text(
-                            'YaCut',
-                            style: GoogleFonts.playfairDisplay(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
+                          Text('YaCut', style: AppTextStyles.display(size: 20)),
                           if (!isClient) ...[
                             const SizedBox(width: 10),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.tealSubtle,
-                                border: Border.all(color: AppColors.teal.withValues(alpha: 0.3)),
+                                border: Border.all(
+                                  color: AppColors.teal.withValues(alpha: 0.3),
+                                ),
                                 borderRadius: BorderRadius.circular(100),
                               ),
                               child: Text(
                                 'BARBERO',
-                                style: GoogleFonts.figtree(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 1.5,
+                                style: AppTextStyles.ui(
+                                  size: 9,
+                                  weight: FontWeight.w700,
                                   color: AppColors.teal,
-                                ),
+                                ).copyWith(letterSpacing: 1.5),
                               ),
                             ),
                           ],
@@ -129,23 +129,19 @@ class _AuthScreenState extends State<AuthScreen>
                         isClient
                             ? 'Tu barbero,\na un toque.'
                             : 'Bienvenido\nde vuelta.',
-                        style: GoogleFonts.playfairDisplay(
-                          fontSize: 36,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                          height: 1.15,
-                        ),
+                        style: AppTextStyles.display(
+                          size: 36,
+                        ).copyWith(height: 1.15),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         isClient
                             ? 'Accede para reservar con tus barberos favoritos.'
                             : 'Gestiona tus citas y haz crecer tu negocio.',
-                        style: GoogleFonts.figtree(
-                          fontSize: 14,
+                        style: AppTextStyles.ui(
+                          size: 14,
                           color: AppColors.textSecondary,
-                          height: 1.5,
-                        ),
+                        ).copyWith(height: 1.5),
                       ),
                     ],
                   ),
@@ -172,11 +168,11 @@ class _AuthScreenState extends State<AuthScreen>
                       ),
                       labelColor: AppColors.background,
                       unselectedLabelColor: AppColors.textSecondary,
-                      labelStyle: GoogleFonts.figtree(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                      labelStyle: AppTextStyles.ui(
+                        size: 13,
+                        weight: FontWeight.w600,
                       ),
-                      unselectedLabelStyle: GoogleFonts.figtree(fontSize: 13),
+                      unselectedLabelStyle: AppTextStyles.ui(size: 13),
                       dividerColor: Colors.transparent,
                       indicatorSize: TabBarIndicatorSize.tab,
                       tabs: const [

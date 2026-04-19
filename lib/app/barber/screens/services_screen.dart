@@ -20,11 +20,11 @@ class BarberService {
   });
 
   Map<String, dynamic> toMap() => {
-        'name': name,
-        'price': price,
-        'durationMinutes': durationMinutes,
-        'description': description,
-      };
+    'name': name,
+    'price': price,
+    'durationMinutes': durationMinutes,
+    'description': description,
+  };
 
   factory BarberService.fromDoc(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
@@ -57,9 +57,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
   void _openForm({BarberService? service}) async {
     final result = await Navigator.of(context).push<BarberService>(
-      MaterialPageRoute(
-        builder: (_) => _ServiceFormScreen(service: service),
-      ),
+      MaterialPageRoute(builder: (_) => _ServiceFormScreen(service: service)),
     );
     if (result == null) return;
 
@@ -104,24 +102,27 @@ class _ServicesScreenState extends State<ServicesScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mis servicios'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Mis servicios'), centerTitle: true),
       body: StreamBuilder<QuerySnapshot>(
         stream: _col.orderBy('name').snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          // Mostrar caché al instante si está disponible, luego actualizar con datos en tiempo real
+          final docs = snapshot.data?.docs ?? [];
+          final services = docs.map((d) => BarberService.fromDoc(d)).toList();
+
+          // Solo mostrar CircularProgressIndicator si NO tenemos datos y está esperando
+          if (services.isEmpty && snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
+
+          if (snapshot.hasError && services.isEmpty) {
             return Center(
-                child: Text('Error: ${snapshot.error}',
-                    style: const TextStyle(color: Colors.redAccent)));
+              child: Text(
+                'Error: ${snapshot.error}',
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            );
           }
-          final docs = snapshot.data?.docs ?? [];
-          final services =
-              docs.map((d) => BarberService.fromDoc(d)).toList();
 
           if (services.isEmpty) {
             return Center(
@@ -168,10 +169,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
         onPressed: () => _openForm(),
         backgroundColor: theme.colorScheme.primary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          'Agregar',
-          style: TextStyle(color: Colors.white),
-        ),
+        label: const Text('Agregar', style: TextStyle(color: Colors.white)),
       ),
     );
   }
@@ -190,10 +188,9 @@ class _ServiceCard extends StatelessWidget {
   });
 
   String _formatPrice(double price) {
-    final formatted = price.toStringAsFixed(0).replaceAllMapped(
-          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]}.',
-        );
+    final formatted = price
+        .toStringAsFixed(0)
+        .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
     return '\$$formatted';
   }
 
@@ -223,15 +220,21 @@ class _ServiceCard extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.edit_outlined,
-                    size: 18, color: Colors.white54),
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                  color: Colors.white54,
+                ),
                 onPressed: onEdit,
                 visualDensity: VisualDensity.compact,
                 tooltip: 'Editar',
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline,
-                    size: 18, color: Colors.redAccent),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: Colors.redAccent,
+                ),
                 onPressed: onDelete,
                 visualDensity: VisualDensity.compact,
                 tooltip: 'Eliminar',
@@ -319,7 +322,7 @@ class _ServiceFormScreenState extends State<_ServiceFormScreen> {
   late final TextEditingController _descCtrl;
   int _duration = 30;
 
-  static const _durations = [15, 20, 30, 45, 60, 75, 90, 120];
+  static const _durations = [2, 15, 20, 30, 45, 60, 75, 90, 120];
 
   @override
   void initState() {
@@ -419,8 +422,8 @@ class _ServiceFormScreenState extends State<_ServiceFormScreen> {
                           d < 60
                               ? '$d minutos'
                               : d == 60
-                                  ? '1 hora'
-                                  : '${d ~/ 60}h ${d % 60 > 0 ? '${d % 60}min' : ''}',
+                              ? '1 hora'
+                              : '${d ~/ 60}h ${d % 60 > 0 ? '${d % 60}min' : ''}',
                         ),
                       ),
                     )
@@ -435,7 +438,9 @@ class _ServiceFormScreenState extends State<_ServiceFormScreen> {
             const SizedBox(height: 6),
             TextFormField(
               controller: _descCtrl,
-              decoration: _inputDecoration('Describe brevemente el servicio...'),
+              decoration: _inputDecoration(
+                'Describe brevemente el servicio...',
+              ),
               maxLines: 3,
               textCapitalization: TextCapitalization.sentences,
             ),
@@ -457,7 +462,9 @@ class _ServiceFormScreenState extends State<_ServiceFormScreen> {
                 child: Text(
                   isEdit ? 'Guardar cambios' : 'Agregar servicio',
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 15),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
                 ),
               ),
             ),
@@ -468,33 +475,32 @@ class _ServiceFormScreenState extends State<_ServiceFormScreen> {
   }
 
   InputDecoration _inputDecoration(String hint) => InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.grey[600]),
-        filled: true,
-        fillColor: const Color(0xFF18181C),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.white24),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.white24),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.redAccent),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.redAccent),
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      );
+    hintText: hint,
+    hintStyle: TextStyle(color: Colors.grey[600]),
+    filled: true,
+    fillColor: const Color(0xFF18181C),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.white24),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.white24),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Theme.of(context).colorScheme.primary),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.redAccent),
+    ),
+    focusedErrorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.redAccent),
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  );
 }
 
 class _FormLabel extends StatelessWidget {

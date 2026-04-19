@@ -12,7 +12,7 @@ void navigateToHome(BuildContext context, {bool returnAfterAuth = false}) {
     Navigator.of(context).pop(true);
     return;
   }
-  
+
   final config = AppConfig.of(context);
   final Widget home = config.isClient
       ? const ClientHomeScreen()

@@ -43,10 +43,8 @@ class WelcomeDialog extends StatelessWidget {
 
     return Dialog(
       backgroundColor: const Color(0xFF1A1A2E),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Padding(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -170,10 +168,7 @@ class WelcomeDialog extends StatelessWidget {
                 ),
                 child: const Text(
                   'Comenzar',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
             ),
@@ -185,11 +180,9 @@ class WelcomeDialog extends StatelessWidget {
               child: OutlinedButton(
                 onPressed: () {
                   Navigator.of(context).pop(); // Cerrar el diálogo
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const AuthScreen(),
-                    ),
-                  );
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const AuthScreen()));
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: theme.colorScheme.primary,
@@ -201,10 +194,7 @@ class WelcomeDialog extends StatelessWidget {
                 ),
                 child: const Text(
                   'Iniciar sesión',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
             ),
@@ -240,11 +230,7 @@ class _FeatureItem extends StatelessWidget {
             shape: BoxShape.circle,
             color: theme.colorScheme.primary.withOpacity(0.15),
           ),
-          child: Icon(
-            icon,
-            size: 20,
-            color: theme.colorScheme.primary,
-          ),
+          child: Icon(icon, size: 20, color: theme.colorScheme.primary),
         ),
         const SizedBox(width: 12),
         Expanded(

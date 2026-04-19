@@ -17,10 +17,7 @@ class BarberApp extends StatelessWidget {
       supportedLocales: const [Locale('es', 'ES'), Locale('en', 'US')],
       theme: buildAppTheme(),
       builder: (context, child) {
-        return AppConfig(
-          appType: AppType.barber,
-          child: child!,
-        );
+        return AppConfig(appType: AppType.barber, child: child!);
       },
       home: const SplashScreen(),
     );

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -41,20 +42,38 @@ class BookAppointmentScreen extends StatefulWidget {
 }
 
 class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
-  int _step = 0; // 0 = servicio, 1 = horario, 2 = confirmación
+  int _step = 0; // 0 = servicio, 1 = horario, 2 = ubicación, 3 = confirmación
   BookService? _selectedService;
   bool _isImmediate = false;
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
+  // Ubicación: 'gps' usa el GPS del teléfono, 'saved' usa una dirección guardada
+  String _locationMode = 'gps';
+  String? _savedAddressId;
+  String? _savedAddressName;
+  String? _savedAddressText;
+  double? _savedAddressLat;
+  double? _savedAddressLng;
   bool _saving = false;
   bool _justAuthenticated = false; // Indica si el usuario acaba de autenticarse
 
+  Future<(double, double)?> _geocodeAddress(String address) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('geocodeAddress');
+      final result = await callable.call({'address': address});
+      final lat = (result.data['lat'] as num).toDouble();
+      final lng = (result.data['lng'] as num).toDouble();
+      return (lat, lng);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Helpers ──────────────────────────────────────────────────
   String _formatPrice(double p) {
-    final f = p.toStringAsFixed(0).replaceAllMapped(
-          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]}.',
-        );
+    final f = p
+        .toStringAsFixed(0)
+        .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
     return '\$$f';
   }
 
@@ -76,7 +95,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
       'sep',
       'oct',
       'nov',
-      'dic'
+      'dic',
     ];
     final h = t.hour.toString().padLeft(2, '0');
     final m = t.minute.toString().padLeft(2, '0');
@@ -94,9 +113,11 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
       // Navegar al login y esperar el resultado
       final result = await Navigator.push<bool>(
         context,
-        MaterialPageRoute(builder: (_) => const AuthScreen(returnAfterAuth: true)),
+        MaterialPageRoute(
+          builder: (_) => const AuthScreen(returnAfterAuth: true),
+        ),
       );
-      
+
       // Si el usuario completó el login, marcar que se acaba de autenticar
       if (result == true && mounted) {
         setState(() => _justAuthenticated = true);
@@ -120,26 +141,47 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         );
       }
 
-      // Try to get client location to share with the barber
+      // Obtener ubicación del cliente para compartir con el barbero
       double? clientLat;
       double? clientLng;
-      try {
-        LocationPermission perm = await Geolocator.checkPermission();
-        if (perm == LocationPermission.denied) {
-          perm = await Geolocator.requestPermission();
+      String? clientAddress;
+      String? clientAddressName;
+
+      if (_locationMode == 'saved') {
+        clientAddress = _savedAddressText;
+        clientAddressName = _savedAddressName;
+        if (_savedAddressLat != null && _savedAddressLng != null) {
+          // Coordenadas guardadas directamente desde el pin del mapa
+          clientLat = _savedAddressLat;
+          clientLng = _savedAddressLng;
+        } else if (_savedAddressText != null) {
+          // Fallback: geocodificar (para direcciones antiguas sin lat/lng)
+          final coords = await _geocodeAddress(_savedAddressText!);
+          if (coords != null) {
+            clientLat = coords.$1;
+            clientLng = coords.$2;
+          }
         }
-        if (perm == LocationPermission.whileInUse ||
-            perm == LocationPermission.always) {
-          final pos = await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.low,
-              timeLimit: Duration(seconds: 5),
-            ),
-          );
-          clientLat = pos.latitude;
-          clientLng = pos.longitude;
-        }
-      } catch (_) {}
+      } else {
+        // Usar GPS actual (comportamiento por defecto)
+        try {
+          LocationPermission perm = await Geolocator.checkPermission();
+          if (perm == LocationPermission.denied) {
+            perm = await Geolocator.requestPermission();
+          }
+          if (perm == LocationPermission.whileInUse ||
+              perm == LocationPermission.always) {
+            final pos = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.low,
+                timeLimit: Duration(seconds: 5),
+              ),
+            );
+            clientLat = pos.latitude;
+            clientLng = pos.longitude;
+          }
+        } catch (_) {}
+      }
 
       await FirebaseFirestore.instance.collection('appointments').add({
         'barberUid': widget.barberUid,
@@ -155,6 +197,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         'createdAt': FieldValue.serverTimestamp(),
         if (clientLat != null) 'clientLat': clientLat,
         if (clientLng != null) 'clientLng': clientLng,
+        if (clientAddress != null) 'clientAddress': clientAddress,
+        if (clientAddressName != null) 'clientAddressName': clientAddressName,
       });
 
       if (!mounted) return;
@@ -164,13 +208,13 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         // Capturar el messenger antes de navegar
         final messenger = ScaffoldMessenger.of(context);
         final primaryColor = Theme.of(context).colorScheme.primary;
-        
+
         // Navegar al home
         await Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const ClientHomeScreen()),
           (route) => false,
         );
-        
+
         // Mostrar mensaje de éxito
         messenger.showSnackBar(
           SnackBar(
@@ -244,6 +288,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         return 'Elige un servicio';
       case 1:
         return '¿Cuándo?';
+      case 2:
+        return '¿Dónde?';
       default:
         return 'Confirmar cita';
     }
@@ -280,11 +326,12 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
               builder: (ctx, child) => Theme(
                 data: Theme.of(ctx).copyWith(
                   colorScheme: Theme.of(ctx).colorScheme.copyWith(
-                        primary: theme.colorScheme.primary,
-                        surface: const Color(0xFF18181C),
-                      ),
-                  dialogTheme:
-                      const DialogThemeData(backgroundColor: Color(0xFF1A1A2E)),
+                    primary: theme.colorScheme.primary,
+                    surface: const Color(0xFF18181C),
+                  ),
+                  dialogTheme: const DialogThemeData(
+                    backgroundColor: Color(0xFF1A1A2E),
+                  ),
                 ),
                 child: child!,
               ),
@@ -303,11 +350,12 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
               builder: (ctx, child) => Theme(
                 data: Theme.of(ctx).copyWith(
                   colorScheme: Theme.of(ctx).colorScheme.copyWith(
-                        primary: theme.colorScheme.primary,
-                        surface: const Color(0xFF18181C),
-                      ),
-                  dialogTheme:
-                      const DialogThemeData(backgroundColor: Color(0xFF1A1A2E)),
+                    primary: theme.colorScheme.primary,
+                    surface: const Color(0xFF18181C),
+                  ),
+                  dialogTheme: const DialogThemeData(
+                    backgroundColor: Color(0xFF1A1A2E),
+                  ),
                 ),
                 child: child!,
               ),
@@ -320,19 +368,46 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
             }
           },
         );
+      case 2:
+        return _StepLocation(
+          key: const ValueKey(2),
+          locationMode: _locationMode,
+          selectedAddressId: _savedAddressId,
+          onGpsSelected: () => setState(() {
+            _locationMode = 'gps';
+            _savedAddressId = null;
+            _savedAddressName = null;
+            _savedAddressText = null;
+          }),
+          onAddressSelected: (id, name, address, lat, lng) => setState(() {
+            _locationMode = 'saved';
+            _savedAddressId = id;
+            _savedAddressName = name;
+            _savedAddressText = address;
+            _savedAddressLat = lat;
+            _savedAddressLng = lng;
+          }),
+        );
       default:
         return _StepConfirm(
-          key: const ValueKey(2),
+          key: const ValueKey(3),
           barberName: widget.barberName,
           service: _selectedService!,
           dateTimeLabel: _formatDateTime(),
+          locationLabel: _locationMode == 'saved' && _savedAddressName != null
+              ? '$_savedAddressName · $_savedAddressText'
+              : 'Ubicación GPS',
           formatPrice: _formatPrice,
         );
     }
   }
 
   Widget _buildBottomBar(ThemeData theme) {
-    final canContinue = _step == 0 ? _canContinueStep1 : _canContinueStep2;
+    final canContinue = switch (_step) {
+      0 => _canContinueStep1,
+      1 => _canContinueStep2,
+      _ => true, // paso 2 (ubicación) y paso 3 (confirmar) siempre habilitados
+    };
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
@@ -341,7 +416,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
           child: ElevatedButton(
             onPressed: (canContinue && !_saving)
                 ? () {
-                    if (_step < 2) {
+                    if (_step < 3) {
                       setState(() => _step++);
                     } else {
                       _confirmAppointment();
@@ -354,19 +429,24 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
               disabledBackgroundColor: Colors.white12,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
             child: _saving
                 ? const SizedBox(
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : Text(
-                    _step < 2 ? 'Continuar' : 'Confirmar cita',
+                    _step < 3 ? 'Continuar' : 'Confirmar cita',
                     style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
           ),
         ),
@@ -411,9 +491,7 @@ class _StepServices extends StatelessWidget {
                   : const Color(0xFF18181C),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: isSelected
-                    ? theme.colorScheme.primary
-                    : Colors.white12,
+                color: isSelected ? theme.colorScheme.primary : Colors.white12,
                 width: isSelected ? 2 : 1,
               ),
             ),
@@ -430,19 +508,23 @@ class _StepServices extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(s.name,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: isSelected
-                                ? theme.colorScheme.primary
-                                : null,
-                          )),
+                      Text(
+                        s.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isSelected ? theme.colorScheme.primary : null,
+                        ),
+                      ),
                       if (s.description.isNotEmpty)
-                        Text(s.description,
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey[500]),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis),
+                        Text(
+                          s.description,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[500],
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                     ],
                   ),
                 ),
@@ -456,9 +538,10 @@ class _StepServices extends StatelessWidget {
                         color: theme.colorScheme.primary,
                       ),
                     ),
-                    Text('${s.durationMinutes} min',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey[500])),
+                    Text(
+                      '${s.durationMinutes} min',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    ),
                   ],
                 ),
               ],
@@ -497,8 +580,10 @@ class _StepTime extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('¿Cuándo quieres la cita?',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            '¿Cuándo quieres la cita?',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 24),
 
           // ── Ahora mismo ──
@@ -513,8 +598,10 @@ class _StepTime extends StatelessWidget {
 
           const SizedBox(height: 16),
           const Center(
-            child: Text('— o programa una cita —',
-                style: TextStyle(color: Colors.white38, fontSize: 13)),
+            child: Text(
+              '— o programa una cita —',
+              style: TextStyle(color: Colors.white38, fontSize: 13),
+            ),
           ),
           const SizedBox(height: 16),
 
@@ -562,7 +649,7 @@ class _StepTime extends StatelessWidget {
       'sep',
       'oct',
       'nov',
-      'dic'
+      'dic',
     ];
     return '${d.day} de ${months[d.month]} de ${d.year}';
   }
@@ -571,6 +658,146 @@ class _StepTime extends StatelessWidget {
     final h = t.hour.toString().padLeft(2, '0');
     final m = t.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+}
+
+// ── Paso 3: Seleccionar ubicación ────────────────────────────────
+class _StepLocation extends StatelessWidget {
+  final String locationMode; // 'gps' o 'saved'
+  final String? selectedAddressId;
+  final VoidCallback onGpsSelected;
+  final void Function(String id, String name, String address, double? lat, double? lng)
+  onAddressSelected;
+
+  const _StepLocation({
+    super.key,
+    required this.locationMode,
+    required this.selectedAddressId,
+    required this.onGpsSelected,
+    required this.onAddressSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final isGuest =
+        uid == null ||
+        uid.isEmpty ||
+        (FirebaseAuth.instance.currentUser?.isAnonymous ?? false);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '¿Dónde quieres la cita?',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'El barbero se dirigirá a la dirección que elijas',
+            style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+          ),
+          const SizedBox(height: 24),
+
+          // Opción GPS
+          _OptionCard(
+            icon: Icons.my_location_rounded,
+            title: 'Mi ubicación actual',
+            subtitle: 'El barbero usará tu GPS al momento de confirmar',
+            selected: locationMode == 'gps',
+            color: theme.colorScheme.primary,
+            onTap: onGpsSelected,
+          ),
+
+          if (!isGuest) ...[
+            const SizedBox(height: 16),
+            const Center(
+              child: Text(
+                '— o elige una dirección guardada —',
+                style: TextStyle(color: Colors.white38, fontSize: 13),
+              ),
+            ),
+            const SizedBox(height: 16),
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
+                  .collection('addresses')
+                  .orderBy('createdAt', descending: false)
+                  .snapshots(),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
+                final docs = snap.data?.docs ?? [];
+                if (docs.isEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF18181C),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.location_off_outlined,
+                          color: Colors.white38,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'No tienes direcciones guardadas. Puedes añadirlas desde tu perfil.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return Column(
+                  children: docs.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final name = data['name'] as String? ?? '';
+                    final address = data['address'] as String? ?? '';
+                    final lat = (data['lat'] as num?)?.toDouble();
+                    final lng = (data['lng'] as num?)?.toDouble();
+                    final isSelected =
+                        locationMode == 'saved' &&
+                        doc.id == selectedAddressId;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _OptionCard(
+                        icon: Icons.location_on_outlined,
+                        title: name,
+                        subtitle: address.isEmpty
+                            ? 'Ubicación guardada con pin'
+                            : address,
+                        selected: isSelected,
+                        color: theme.colorScheme.primary,
+                        onTap: () => onAddressSelected(doc.id, name, address, lat, lng),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -599,8 +826,9 @@ class _OptionCard extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color:
-              selected ? color.withValues(alpha: 0.12) : const Color(0xFF18181C),
+          color: selected
+              ? color.withValues(alpha: 0.12)
+              : const Color(0xFF18181C),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: selected ? color : Colors.white12,
@@ -615,13 +843,17 @@ class _OptionCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: selected ? color : null,
-                      )),
-                  Text(subtitle,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: selected ? color : null,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  ),
                 ],
               ),
             ),
@@ -633,11 +865,12 @@ class _OptionCard extends StatelessWidget {
   }
 }
 
-// ── Paso 3: Confirmar ────────────────────────────────────────────
+// ── Paso 4: Confirmar ────────────────────────────────────────────
 class _StepConfirm extends StatelessWidget {
   final String barberName;
   final BookService service;
   final String dateTimeLabel;
+  final String locationLabel;
   final String Function(double) formatPrice;
 
   const _StepConfirm({
@@ -645,6 +878,7 @@ class _StepConfirm extends StatelessWidget {
     required this.barberName,
     required this.service,
     required this.dateTimeLabel,
+    required this.locationLabel,
     required this.formatPrice,
   });
 
@@ -656,8 +890,10 @@ class _StepConfirm extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Resumen de tu cita',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            'Resumen de tu cita',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 24),
 
           _SummaryRow(
@@ -686,6 +922,11 @@ class _StepConfirm extends StatelessWidget {
             label: 'Fecha / Hora',
             value: dateTimeLabel,
           ),
+          _SummaryRow(
+            icon: Icons.location_on_outlined,
+            label: 'Ubicación',
+            value: locationLabel,
+          ),
 
           const SizedBox(height: 24),
           Container(
@@ -694,12 +935,16 @@ class _StepConfirm extends StatelessWidget {
               color: theme.colorScheme.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.25)),
+                color: theme.colorScheme.primary.withValues(alpha: 0.25),
+              ),
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline,
-                    color: theme.colorScheme.primary, size: 18),
+                Icon(
+                  Icons.info_outline,
+                  color: theme.colorScheme.primary,
+                  size: 18,
+                ),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
@@ -737,8 +982,10 @@ class _SummaryRow extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: Colors.white54),
           const SizedBox(width: 14),
-          Text('$label: ',
-              style: const TextStyle(color: Colors.white54, fontSize: 14)),
+          Text(
+            '$label: ',
+            style: const TextStyle(color: Colors.white54, fontSize: 14),
+          ),
           Expanded(
             child: Text(
               value,

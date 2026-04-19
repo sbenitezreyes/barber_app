@@ -1,6 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:geolocator/geolocator.dart';
 
 import 'app_config.dart';
 import 'auth/auth_screen.dart';
@@ -25,12 +25,26 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
 
-    _fade = CurvedAnimation(parent: _ctrl, curve: const Interval(0.0, 0.6, curve: Curves.easeOut));
+    _fade = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+    );
     _slide = Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _ctrl, curve: const Interval(0.0, 0.65, curve: Curves.easeOutCubic)));
-    _lineExpand = CurvedAnimation(parent: _ctrl, curve: const Interval(0.55, 1.0, curve: Curves.easeOut));
+        .animate(
+          CurvedAnimation(
+            parent: _ctrl,
+            curve: const Interval(0.0, 0.65, curve: Curves.easeOutCubic),
+          ),
+        );
+    _lineExpand = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.55, 1.0, curve: Curves.easeOut),
+    );
 
     _ctrl.forward();
     _goToAuth();
@@ -42,20 +56,41 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
+  Future<void> _requestLocationPermission() async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        await Geolocator.requestPermission();
+      }
+    } catch (_) {}
+  }
+
   Future<void> _goToAuth() async {
+    // Esperar la animación y que Firebase restaure la sesión persistida
+    final authFuture = FirebaseAuth.instance.authStateChanges().first;
     await Future.delayed(const Duration(milliseconds: 2400));
+    final user = await authFuture.timeout(
+      const Duration(seconds: 6),
+      onTimeout: () => FirebaseAuth.instance.currentUser,
+    );
+    if (!mounted) return;
+    // ignore: use_build_context_synchronously
+    final config = AppConfig.of(context);
+
+    // Pedir permiso de ubicación para la app cliente antes de cargar el mapa
+    if (config.isClient) {
+      await _requestLocationPermission();
+    }
     if (!mounted) return;
 
-    final config = AppConfig.of(context);
-    final user = FirebaseAuth.instance.currentUser;
-
     if (user != null && !user.isAnonymous) {
-      final Widget home = config.isClient
+      if (!mounted) return;
+      final destination = config.isClient
           ? const ClientHomeScreen()
           : const BarberHomeScreen();
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => home),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => destination));
     } else {
       if (config.isClient) {
         try {
@@ -71,6 +106,7 @@ class _SplashScreenState extends State<SplashScreen>
           );
         }
       } else {
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const AuthScreen()),
         );
@@ -98,7 +134,9 @@ class _SplashScreenState extends State<SplashScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    (isClient ? AppColors.gold : AppColors.teal).withValues(alpha: 0.08),
+                    (isClient ? AppColors.gold : AppColors.teal).withValues(
+                      alpha: 0.08,
+                    ),
                     Colors.transparent,
                   ],
                 ),
@@ -147,15 +185,18 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: (isClient ? AppColors.gold : AppColors.teal)
-                                  .withValues(alpha: 0.20),
+                              color:
+                                  (isClient ? AppColors.gold : AppColors.teal)
+                                      .withValues(alpha: 0.20),
                               blurRadius: 24,
                               spreadRadius: 2,
                             ),
                           ],
                         ),
                         child: Icon(
-                          isClient ? Icons.content_cut_rounded : Icons.work_outline_rounded,
+                          isClient
+                              ? Icons.content_cut_rounded
+                              : Icons.work_outline_rounded,
                           size: 34,
                           color: isClient ? AppColors.gold : AppColors.teal,
                         ),
@@ -165,13 +206,9 @@ class _SplashScreenState extends State<SplashScreen>
                       // Marca — serif display
                       Text(
                         'YaCut',
-                        style: GoogleFonts.playfairDisplay(
-                          fontSize: 42,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                          letterSpacing: 1,
-                          height: 1,
-                        ),
+                        style: AppTextStyles.display(
+                          size: 42,
+                        ).copyWith(letterSpacing: 1, height: 1),
                       ),
                       const SizedBox(height: 10),
 
@@ -197,20 +234,24 @@ class _SplashScreenState extends State<SplashScreen>
                       // Modo badge — solo para barbero
                       if (!isClient)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 5,
+                          ),
                           decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.teal.withValues(alpha: 0.4)),
+                            border: Border.all(
+                              color: AppColors.teal.withValues(alpha: 0.4),
+                            ),
                             borderRadius: BorderRadius.circular(100),
                             color: AppColors.tealSubtle,
                           ),
                           child: Text(
                             'MODO BARBERO',
-                            style: GoogleFonts.figtree(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 2,
+                            style: AppTextStyles.ui(
+                              size: 10,
+                              weight: FontWeight.w700,
                               color: AppColors.teal,
-                            ),
+                            ).copyWith(letterSpacing: 2),
                           ),
                         ),
                       if (!isClient) const SizedBox(height: 10),
@@ -220,12 +261,10 @@ class _SplashScreenState extends State<SplashScreen>
                         isClient
                             ? 'Tu barbero, donde estés.'
                             : 'Gestiona tus citas con estilo.',
-                        style: GoogleFonts.figtree(
-                          fontSize: 14,
+                        style: AppTextStyles.ui(
+                          size: 14,
                           color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w400,
-                          letterSpacing: 0.3,
-                        ),
+                        ).copyWith(letterSpacing: 0.3),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -248,7 +287,8 @@ class _SplashScreenState extends State<SplashScreen>
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 1.5,
-                    color: (isClient ? AppColors.gold : AppColors.teal).withValues(alpha: 0.6),
+                    color: (isClient ? AppColors.gold : AppColors.teal)
+                        .withValues(alpha: 0.6),
                   ),
                 ),
               ),

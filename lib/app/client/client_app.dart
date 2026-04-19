@@ -17,10 +17,7 @@ class ClientApp extends StatelessWidget {
       supportedLocales: const [Locale('es', 'ES'), Locale('en', 'US')],
       theme: buildAppTheme(),
       builder: (context, child) {
-        return AppConfig(
-          appType: AppType.client,
-          child: child!,
-        );
+        return AppConfig(appType: AppType.client, child: child!);
       },
       home: const SplashScreen(),
     );
