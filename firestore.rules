@@ -12,16 +12,27 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null;
 
+      // Clientes anónimos y nuevos usuarios pueden crear su propio documento
+      // (necesario para guardar el token FCM antes del registro)
+      allow create: if request.auth != null && request.auth.uid == userId;
+
       // Client can update rating/ratingCount only (for review recalculation)
       allow update: if request.auth != null
         && request.resource.data.diff(resource.data)
             .affectedKeys().hasOnly(['rating', 'ratingCount']);
 
-      // Barber's own token refresh (fcmToken only)
+      // Barber's own profile updates: token refresh, location, liveRoute, availability
       allow update: if request.auth != null
         && request.auth.uid == userId
         && request.resource.data.diff(resource.data)
-            .affectedKeys().hasOnly(['fcmToken']);
+            .affectedKeys().hasOnly(['fcmToken', 'location', 'liveRoute', 'isAvailable']);
+
+      // User submits for identity verification (only allowed to set status → 'pending')
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['verificationStatus', 'verificationSubmittedAt'])
+        && request.resource.data.verificationStatus == 'pending';
     }
 
     // ── Services (read-only for clients) ──────────────────────
@@ -29,11 +40,21 @@ service cloud.firestore {
       allow read: if request.auth != null;
     }
 
-    // ── Reviews (anonymous, docId = reviewerUid) ──────────────
+    // ── Reviews ───────────────────────────────────────────────
     match /users/{userId}/reviews/{reviewId} {
       allow read: if request.auth != null;
-      // Only the reviewer can write (create/update/delete) their own review
-      allow write: if request.auth != null && request.auth.uid == reviewId;
+      // Create: el clientUid del documento debe coincidir con el usuario autenticado
+      allow create: if request.auth != null
+        && request.resource.data.clientUid == request.auth.uid;
+      // Delete: solo el autor puede eliminar su reseña
+      allow delete: if request.auth != null
+        && resource.data.clientUid == request.auth.uid;
+    }
+
+    // ── Barber notes about clients (anonymous, barbers only) ──
+    // Stored under the client's user doc; not shown in the client app.
+    match /users/{userId}/barberReviews/{reviewId} {
+      allow read, write: if request.auth != null;
     }
 
     // ── Appointments ──────────────────────────────────────────
@@ -46,11 +67,13 @@ service cloud.firestore {
         && (resource.data.clientUid == request.auth.uid
             || resource.data.barberUid == request.auth.uid);
 
-      // Barber can update status, GPS coordinates, and cancelledBy when cancelling
+      // Barber can update status, GPS coordinates, departure flag, and cancelledBy when cancelling
       allow update: if request.auth != null
         && resource.data.barberUid == request.auth.uid
         && request.resource.data.diff(resource.data)
-            .affectedKeys().hasOnly(['status', 'barberCurrentLat', 'barberCurrentLng', 'cancelledBy']);
+            .affectedKeys().hasOnly(['status', 'barberCurrentLat', 'barberCurrentLng', 'cancelledBy', 'barberDeparting', 'barberDepartingEtaMin'])
+        && (!request.resource.data.keys().hasAny(['status']) ||
+            request.resource.data.status in ['confirmed', 'en_servicio', 'completed', 'missed', 'cancelled', 'rejected']);
 
       // Client can cancel their own appointment (status → 'cancelled' + cancelledBy)
       allow update: if request.auth != null

@@ -1,10 +1,33 @@
 {
   "version": 1,
   "skills": {
+    "flutter-animating-apps": {
+      "source": "flutter/skills",
+      "sourceType": "github",
+      "computedHash": "df4443b32d5d2f266a3fd4f58e4bff44f6ed6264df723a904d5ef3108785db18"
+    },
+    "flutter-caching-data": {
+      "source": "flutter/skills",
+      "sourceType": "github",
+      "computedHash": "0369bd369995eebbb3024859b27aebd48612935517b68d762e27ec24cf32f27b"
+    },
+    "flutter-theming-apps": {
+      "source": "flutter/skills",
+      "sourceType": "github",
+      "computedHash": "03f05d2aaad597d1a74c2e82d127088a5a822da79e00e3e77dd65449c9db7f7b"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",
       "computedHash": "516bd2154eb843a8240e43d5b285229129853114ad7075a5e141e1c08e408c84"
+    },
+    "sleek-design-mobile-apps": {
+      "source": "sleekdotdesign/agent-skills",
+      "sourceType": "github",
+      "computedHash": "d2defff5e0e42a5d5404b12cbb50753d15bc9a7a665386531589c5dd91925b2c"
     }
   }
+}
+}
+
 }

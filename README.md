@@ -1,225 +1,216 @@
-# 💈 Barber App
+# YaCut — Barbería a Demanda
 
-Aplicación completa de gestión de citas para barberías con tracking GPS en tiempo real y sistema de notificaciones.
+Plataforma completa de barbería a domicilio construida en Flutter, con dos apps separadas (cliente y barbero), tracking GPS en tiempo real, sistema de notificaciones push y seguridad de API keys a través de Cloud Functions.
 
-## 📱 Características
+## Características
 
-### Para Clientes
-- ✅ Agendar citas (inmediatas o programadas)
-- 📍 **Tracking en tiempo real** del barbero en camino
-- 🗺️ Mapa con ruta y ETA cuando el barbero acepta cita inmediata
-- ❌ Cancelar citas con notificación automática
-- 📋 Ver historial de citas
-- 👤 Gestión de perfil
+### App Cliente
+- Reservar citas inmediatas o programadas con barberos cercanos
+- Tracking en tiempo real del barbero en camino (ruta por calles, no línea recta)
+- Mapa interactivo con marcadores, ruta calculada y ETA actualizado en tiempo real
+- Cancelar citas con notificación automática al barbero
+- Historial y calendario de citas con colores por estado
+- Direcciones guardadas con mapa y geocoding inverso
+- Favoritos de barberos
+- Modo invitado para explorar la app sin registro
+- Botón SOS con contactos de emergencia y detección de agitación del teléfono
+- Gestión de perfil y foto de usuario
 
-### Para Barberos
-- 🔔 **Sistema de notificaciones** con campanita y badge contador
-- ✅ Aceptar/rechazar solicitudes de citas
-- 🚗 Navegación GPS automática hacia el cliente
-- 📊 Agenda de citas (pendientes, confirmadas, completadas)
-- 📍 Publicación automática de ubicación en tiempo real
-- 👥 Gestión de perfil y servicios
+### App Barbero
+- Recibir y gestionar solicitudes de citas en tiempo real
+- Notificaciones push con badge contador persistente
+- Aceptar o rechazar citas de clientes
+- Navegación GPS automática hacia el cliente al aceptar una cita inmediata
+- Agenda con calendario por día y estados de citas
+- Panel de estadísticas con logros desbloqueables por hitos
+- Publicación automática de ubicación GPS cada 5 segundos durante citas activas
+- Horario de trabajo configurable por días
+- Gestión de servicios y precios
+- Contactos de emergencia y botón SOS con detección de agitación
+- Verificación de identidad por cédula (OCR)
 
-## 🛠️ Tecnologías Utilizadas
+## Tecnologías
 
 ### Frontend
-- **Flutter** - Framework multiplataforma
-- **Google Maps** - Mapas y navegación
-- **Geolocator** - GPS y ubicación
-- **SharedPreferences** - Persistencia local
+- **Flutter** — framework multiplataforma con flavors (client / barber)
+- **Google Maps Flutter** — mapas, marcadores y polilíneas de ruta
+- **Geolocator** — GPS y permisos de ubicación
+- **Shake** — detección de agitación para activar SOS
+- **Google Fonts (Playfair Display + Figtree)** — sistema de diseño "La Navaja"
+- **SharedPreferences** — persistencia local de flags y preferencias
 
 ### Backend
-- **Firebase Authentication** - Autenticación de usuarios
-- **Cloud Firestore** - Base de datos en tiempo real
-- **Firebase Cloud Messaging (FCM)** - Notificaciones push
-- **Cloud Functions** - Lógica del lado del servidor
+- **Firebase Authentication** — email/contraseña, Google Sign-In, usuarios anónimos (invitados)
+- **Cloud Firestore** — base de datos en tiempo real con reglas de seguridad por rol
+- **Firebase Cloud Messaging (FCM)** — notificaciones push
+- **Cloud Functions (Node.js v2)** — lógica de servidor y proxies seguros de Google Maps
+- **Firebase Secret Manager** — almacenamiento seguro de API keys (nunca en el APK)
 
-## 🏗️ Arquitectura
+## Arquitectura
 
 ```
 lib/
 ├── app/
-│   ├── barber/          # Módulo del barbero
-│   │   ├── screens/     # Pantallas (home, ruta, agenda)
-│   │   └── services/    # Servicios (GPS, FCM)
-│   └── client/          # Módulo del cliente
-│       ├── screens/     # Pantallas (home, tracking)
-│       └── services/    # Servicios compartidos
-├── main_barber.dart     # Entry point barbero
-└── main_client.dart     # Entry point cliente
+│   ├── barber/
+│   │   ├── screens/         # home, agenda, ruta cliente, estadísticas, notificaciones
+│   │   ├── services/        # FcmService (singleton), BarberGpsService
+│   │   └── ...tabs/         # mapa, agenda, perfil, configuración
+│   ├── client/
+│   │   ├── screens/         # home, tracking, reserva, direcciones, perfil
+│   │   └── ...tabs/         # mapa, citas, favoritos, perfil
+│   └── shared/
+│       ├── auth/            # login, registro, Google Auth, verificación cédula
+│       ├── theme/           # AppColors, AppTextStyles, AppDecorations ("La Navaja")
+│       └── ...              # splash, app_config, guest_auth_prompt
+├── main_barber.dart         # entry point app barbero
+└── main_client.dart         # entry point app cliente
+
+functions/
+└── index.js                 # Cloud Functions: notificaciones + proxies Google Maps
 ```
 
-## 🚀 Configuración del Proyecto
+## Seguridad de API Keys
 
-### Requisitos Previos
-- Flutter SDK (>=3.0.0)
+Las llamadas a Google Directions API y Geocoding API se realizan desde **Cloud Functions**, no desde el APK. La clave del servidor se almacena en **Firebase Secret Manager** y nunca se incluye en el código compilado.
+
+- `getRoute` — proxy para Google Directions API (ruta por calles)
+- `reverseGeocode` — proxy para Geocoding API (coordenadas → dirección)
+- `geocodeAddress` — proxy para Geocoding API (dirección → coordenadas)
+
+La Maps SDK key del AndroidManifest.xml está protegida por restricción de SHA-1 + package name (solo funciona desde el APK firmado), lo que es aceptable para uso en dispositivo.
+
+## Configuración del Proyecto
+
+### Requisitos
+- Flutter SDK ≥ 3.19
 - Firebase CLI
-- Cuenta de Google Cloud Platform
-- Android Studio / Xcode
+- Cuenta Google Cloud Platform con facturación activa (para Cloud Functions y Secret Manager)
+- Android Studio con NDK
 
-### 1. Clonar el Repositorio
+### 1. Clonar y dependencias
 ```bash
 git clone https://github.com/sbenitezreyes/barber_app.git
 cd barber_app
-```
-
-### 2. Instalar Dependencias
-```bash
 flutter pub get
 ```
 
-### 3. Configurar Firebase
+### 2. Firebase
 ```bash
-# Instalar FlutterFire CLI
 dart pub global activate flutterfire_cli
-
-# Configurar proyecto de Firebase
 flutterfire configure
 ```
 
-### 4. Google Maps API Key
-1. Ir a [Google Cloud Console](https://console.cloud.google.com/)
-2. Habilitar **Maps SDK for Android** y **Maps SDK for iOS**
-3. Crear API Key
+### 3. API Keys de Google Maps
 
-**Android:** Agregar en `android/app/src/main/AndroidManifest.xml`
+**AndroidManifest.xml** — Maps SDK for Android (restringida por SHA-1 + package name):
 ```xml
 <meta-data
     android:name="com.google.android.geo.API_KEY"
-    android:value="TU_API_KEY"/>
+    android:value="TU_MAPS_SDK_KEY"/>
 ```
 
-**iOS:** Agregar en `ios/Runner/AppDelegate.swift`
-```swift
-GMSServices.provideAPIKey("TU_API_KEY")
-```
-
-### 5. Deploy de Firestore Rules
+**Firebase Secret Manager** — clave sin restricción de plataforma para Cloud Functions (Directions API + Geocoding API):
 ```bash
+firebase functions:secrets:set GOOGLE_MAPS_KEY
+# pegar la clave cuando lo pida
+```
+
+APIs a habilitar en Google Cloud Console:
+- Maps SDK for Android
+- Directions API
+- Geocoding API
+
+### 4. Deploy
+
+```bash
+# Reglas de Firestore
 firebase deploy --only firestore:rules
-```
 
-### 6. Deploy de Cloud Functions
-```bash
-cd functions
-npm install
-cd ..
+# Cloud Functions
+cd functions && npm install && cd ..
 firebase deploy --only functions
+
+# Todo en un paso
+firebase deploy
 ```
 
-## 🎯 Ejecutar el Proyecto
+### 5. Ejecutar
 
-### App Cliente
 ```bash
-flutter run -t lib/main_client.dart
+# App cliente
+flutter run --flavor client -t lib/main_client.dart
+
+# App barbero
+flutter run --flavor barber -t lib/main_barber.dart
 ```
 
-### App Barbero
+### APKs de release
+
 ```bash
-flutter run -t lib/main_barber.dart
+flutter build apk --flavor client -t lib/main_client.dart \
+  --release --obfuscate --split-debug-info=build/symbols/client
+
+flutter build apk --flavor barber -t lib/main_barber.dart \
+  --release --obfuscate --split-debug-info=build/symbols/barber
 ```
 
-## 📦 Dependencias Principales
-
-```yaml
-dependencies:
-  flutter:
-    sdk: flutter
-  firebase_core: ^2.24.2
-  firebase_auth: ^4.16.0
-  cloud_firestore: ^4.14.0
-  firebase_messaging: ^14.7.10
-  google_maps_flutter: ^2.5.0
-  geolocator: ^10.1.0
-  shared_preferences: ^2.2.2
-  intl: ^0.18.1
-```
-
-## 🔐 Firestore Security Rules
-
-Las reglas implementadas garantizan:
-- ✅ Los barberos pueden actualizar `status`, `barberCurrentLat`, `barberCurrentLng`
-- ✅ Los clientes pueden cancelar citas (cambiar `status` a `'cancelled'`)
-- ✅ Solo usuarios autenticados pueden leer/escribir sus propios datos
-- ✅ Validación de campos obligatorios en documentos
-
-## 🔔 Sistema de Notificaciones
-
-### Funcionamiento
-1. **Cloud Function** detecta cambios en `appointments`
-2. Envía notificación push al dispositivo correspondiente
-3. **FCM Service** maneja la notificación:
-   - App en foreground: muestra notificación local
-   - App en background: notificación nativa del sistema
-   - Tap en notificación: navega a la pantalla relevante
-
-### Badge Counter
-- Cuenta notificaciones no vistas (pending + cancelled recientes)
-- Se resetea a 0 al abrir el panel de notificaciones
-- Persistencia con `SharedPreferences`
-
-## 🗺️ GPS Tracking
-
-### Publicación de Ubicación
-- **Barber GPS Service:** Publica coordenadas cada 5 segundos en background
-- **Client Route Screen:** Publica desde foreground cuando hay ruta activa
-- Solo se activa para citas con `status == 'confirmed' && isImmediate == true`
-
-### Visualización
-- Banner en vivo aparece inmediatamente al confirmar cita
-- Mapa muestra marcador del barbero y ruta calculada
-- ETA actualizado en tiempo real
-
-## 📝 Flujo de Citas Inmediatas
+## Flujo de Cita Inmediata
 
 1. Cliente solicita cita inmediata → `status: 'pending'`
 2. Notificación push al barbero
 3. Barbero acepta → `status: 'confirmed'`
-4. **GPS Service** comienza a publicar ubicación
-5. Cliente ve banner "El barbero va en camino"
-6. Tap en banner → pantalla de tracking con mapa
-7. Barbero ve ruta de navegación hacia cliente
-8. Al llegar, barbero marca como completada
+4. BarberGpsService publica ubicación cada 5 s en Firestore
+5. Cliente ve banner "El barbero va en camino" → pantalla de tracking
+6. Ruta por calles calculada via Cloud Function (Google Directions API)
+7. Barbero ve navegación GPS hacia el cliente (ClientRouteScreen)
+8. Al terminar → `status: 'completed'`; GPS se detiene automáticamente
 
-## 🔄 Versionamiento
+## Flujo de Estado de Citas
 
-Este proyecto usa **Git** y **GitHub** para control de versiones.
-
-### Guardar cambios
-```bash
-git add .
-git commit -m "descripción de cambios"
-git push
+```
+pending → confirmed → en_servicio → completed
+pending | confirmed → cancelled   (cancelledBy: "client" | "barber")
+pending             → rejected    (barbero rechaza)
 ```
 
-### Ver historial
+## Reglas de Firestore
+
+Seguridad por rol implementada en `firestore.rules`:
+- Barbero puede actualizar `status` (confirmed / en_servicio / completed / missed / cancelled / **rejected**), coordenadas GPS, `cancelledBy` y flags de salida
+- Cliente puede cancelar su propia cita (`status: 'cancelled'` + `cancelledBy`)
+- Clientes pueden crear reseñas; solo el autor puede eliminarlas
+- Clientes pueden actualizar rating del barbero
+- Solo el dueño del documento puede leer/escribir su subcolección `addresses`
+
+## Tests
+
 ```bash
-git log --oneline
+flutter test
 ```
 
-## 🐛 Troubleshooting
+54 tests unitarios en `test/` — cálculos Haversine, formateo de tiempo, lógica de notificaciones y transiciones de estado. Firebase y Google Maps no están testeados (sin mocks de integración).
 
-### FCM: "Permission request already running"
-- Solucionado con patrón singleton y try-catch en `FcmService`
-- Se ignora silenciosamente en hot restart
+## Dependencias Principales
 
-### GPS no publica coordenadas
-- Verificar permisos de ubicación en AndroidManifest.xml / Info.plist
-- Verificar Firestore rules permiten `barberCurrentLat/Lng`
+```yaml
+google_maps_flutter: ^2.9.0
+geolocator: ^13.0.2
+firebase_core: ^3.13.0
+firebase_auth: ^5.5.2
+cloud_firestore: ^5.6.5
+firebase_messaging: ^15.2.5
+cloud_functions: ^6.0.6
+shake: ^3.0.0
+google_fonts: ^6.2.1
+table_calendar: ^3.1.3
+flutter_polyline_points: ^2.1.0
+```
 
-### Badge no se resetea
-- Verificar que `SharedPreferences` esté instalado
-- Hot restart completo para limpiar estado
-
-## 📄 Licencia
-
-Este proyecto es privado y de uso exclusivo.
-
-## 👨‍💻 Autor
+## Autor
 
 **Santiago Benítez Reyes**
 - GitHub: [@sbenitezreyes](https://github.com/sbenitezreyes)
 
 ---
 
-Desarrollado con ❤️ usando Flutter y Firebase
+Desarrollado con Flutter y Firebase

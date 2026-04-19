@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Simula la lógica de notificaciones cuando se cancela una cita
 class NotificationLogic {
   /// Determina quién debe recibir la notificación de cancelación
-  /// 
+  ///
   /// Si el barbero canceló (cancelledBy == barberUid), notificar al cliente
   /// Si el cliente canceló (cancelledBy == clientUid), notificar al barbero
   static String getNotificationRecipient({

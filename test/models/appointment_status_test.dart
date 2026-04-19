@@ -1,13 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 /// Estados posibles de una cita
-enum AppointmentStatus {
-  pending,
-  confirmed,
-  rejected,
-  cancelled,
-  completed
-}
+enum AppointmentStatus { pending, confirmed, rejected, cancelled, completed }
 
 /// Lógica de transiciones de estado de citas
 class AppointmentStatusLogic {
@@ -19,12 +13,12 @@ class AppointmentStatusLogic {
         return to == AppointmentStatus.confirmed ||
             to == AppointmentStatus.rejected ||
             to == AppointmentStatus.cancelled;
-      
+
       case AppointmentStatus.confirmed:
         // Desde confirmed se puede ir a cancelled o completed
         return to == AppointmentStatus.cancelled ||
             to == AppointmentStatus.completed;
-      
+
       case AppointmentStatus.rejected:
       case AppointmentStatus.cancelled:
       case AppointmentStatus.completed:
@@ -281,10 +275,7 @@ void main() {
       });
 
       test('Return null for invalid string', () {
-        expect(
-          AppointmentStatusLogic.fromString('invalid_status'),
-          isNull,
-        );
+        expect(AppointmentStatusLogic.fromString('invalid_status'), isNull);
       });
     });
 

@@ -12,11 +12,7 @@ void main() {
       // Test that a basic MaterialApp renders without crashing
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: Text('Barber App'),
-            ),
-          ),
+          home: Scaffold(body: Center(child: Text('Barber App'))),
         ),
       );
 
@@ -69,7 +65,9 @@ void main() {
       expect(find.byType(Container), findsWidgets);
     });
 
-    testWidgets('Badges display notification count', (WidgetTester tester) async {
+    testWidgets('Badges display notification count', (
+      WidgetTester tester,
+    ) async {
       const notificationCount = 5;
 
       await tester.pumpWidget(
@@ -87,7 +85,9 @@ void main() {
       expect(find.byIcon(Icons.notifications), findsOneWidget);
     });
 
-    testWidgets('Dialogs can be shown and dismissed', (WidgetTester tester) async {
+    testWidgets('Dialogs can be shown and dismissed', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
