@@ -1468,9 +1468,46 @@ class _PendingRequestsPanelState extends State<_PendingRequestsPanel> {
     String status,
     String clientName, {
     bool isImmediate = false,
+    DateTime? scheduledAt,
     double? clientLat,
     double? clientLng,
   }) async {
+    if (status == 'confirmed') {
+      final now = DateTime.now();
+      final apptTime = scheduledAt ?? now;
+      final expired = isImmediate
+          ? now.difference(apptTime) > const Duration(hours: 24)
+          : now.isAfter(apptTime);
+
+      if (expired) {
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: AppColors.surfaceElevated,
+            title: Text('Cita expirada', style: AppTextStyles.title),
+            content: Text(
+              isImmediate
+                  ? 'Esta solicitud inmediata tiene más de 24 horas. Ya no es posible aceptarla.'
+                  : 'No alcanzaste a aceptar a tiempo. La cita estaba programada para el ${DateFormat("d 'de' MMMM 'a las' HH:mm", 'es').format(apptTime)} y ya pasó.',
+              style: AppTextStyles.body,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Entendido'),
+              ),
+            ],
+          ),
+        );
+        await FirebaseFirestore.instance
+            .collection('appointments')
+            .doc(id)
+            .update({'status': 'rejected'});
+        return;
+      }
+    }
+
     if (status == 'rejected') {
       final ok = await showDialog<bool>(
         context: context,
@@ -1505,7 +1542,7 @@ class _PendingRequestsPanelState extends State<_PendingRequestsPanel> {
         isImmediate &&
         clientLat != null &&
         clientLng != null &&
-        mounted) {
+        context.mounted) {
       Navigator.of(context).pop(); // cerrar panel
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -1975,6 +2012,7 @@ class _PendingRequestsPanelState extends State<_PendingRequestsPanel> {
                                                   'confirmed',
                                                   clientName,
                                                   isImmediate: isImmediate,
+                                                  scheduledAt: dt,
                                                   clientLat: cLat,
                                                   clientLng: cLng,
                                                 ),
