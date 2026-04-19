@@ -2,9 +2,14 @@ import 'dart:async';
 import 'dart:math' show asin, cos, pi, sin, sqrt;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+import '../../shared/theme/app_theme.dart';
 
 /// Pantalla estilo Didi/Uber: el cliente ve la ubicación del barbero
 /// moviéndose en tiempo real hacia su casa.
@@ -35,7 +40,11 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
   LatLng? _clientLatLng;
 
   double? _distanceKm;
-  String _status = 'confirmed'; // confirmed | completed
+  String _status = 'confirmed'; // confirmed | en_servicio | completed
+  bool _autoCenter = true;
+
+  List<LatLng> _routePoints = [];
+  LatLng? _lastRouteBarberPos;
 
   StreamSubscription<DocumentSnapshot>? _apptSub;
 
@@ -59,10 +68,11 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF18181C),
+        backgroundColor: AppColors.surfaceElevated,
         title: const Text('Cancelar cita'),
         content: const Text(
-            '¿Seguro que quieres cancelar la cita? El barbero será notificado.'),
+          '¿Seguro que quieres cancelar la cita? El barbero será notificado.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -70,14 +80,17 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sí, cancelar',
-                style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Sí, cancelar',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
-      await FirebaseFirestore.instance
+    HapticFeedback.mediumImpact();
+    await FirebaseFirestore.instance
         .collection('appointments')
         .doc(widget.appointmentId)
         .update({
@@ -85,7 +98,6 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
           'cancelledBy': FirebaseAuth.instance.currentUser?.uid,
         });
     if (mounted) {
-      // Vuelve al inicio (pop hasta la raiz)
       Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
@@ -106,7 +118,6 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
       if (cLat != null && cLng != null) {
         _clientLatLng = LatLng(cLat, cLng);
       }
-      // Si barberCurrentLat/Lng fue borrado de Firestore, limpiar el marcador
       if (bLat != null && bLng != null) {
         _barberLatLng = LatLng(bLat, bLng);
         if (_clientLatLng != null) {
@@ -118,7 +129,6 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
       }
     });
 
-    // Si el barbero cancela/rechaza por su lado, volver al inicio
     if (newStatus == 'cancelled' || newStatus == 'rejected') {
       _apptSub?.cancel();
       _apptSub = null;
@@ -128,10 +138,39 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
       return;
     }
 
-    // Animar cámara para mostrar ambos puntos
     if (_barberLatLng != null && _clientLatLng != null) {
-      _fitBounds();
+      if (_autoCenter) _fitBounds();
+      _fetchRoute(_barberLatLng!, _clientLatLng!);
     }
+  }
+
+  // ── Helpers de mapa ──────────────────────────────────────────────────
+  Future<void> _fetchRoute(LatLng origin, LatLng destination) async {
+    if (_lastRouteBarberPos != null) {
+      final moved = _haversine(
+        origin.latitude,
+        origin.longitude,
+        _lastRouteBarberPos!.latitude,
+        _lastRouteBarberPos!.longitude,
+      );
+      if (moved < 80) return;
+    }
+    _lastRouteBarberPos = origin;
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('getRoute');
+      final result = await callable.call({
+        'originLat': origin.latitude,
+        'originLng': origin.longitude,
+        'destLat': destination.latitude,
+        'destLng': destination.longitude,
+      });
+      final encoded = result.data['encodedPolyline'] as String?;
+      if (!mounted || encoded == null || encoded.isEmpty) return;
+      final points = PolylinePoints().decodePolyline(encoded);
+      setState(() {
+        _routePoints = points.map((p) => LatLng(p.latitude, p.longitude)).toList();
+      });
+    } catch (_) {}
   }
 
   Future<void> _fitBounds() async {
@@ -149,16 +188,15 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
         b.longitude > c.longitude ? b.longitude : c.longitude,
       ),
     );
-    ctrl.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 80),
-    );
+    ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
   }
 
   double _haversine(double lat1, double lon1, double lat2, double lon2) {
     const r = 6371000.0;
     final dLat = (lat2 - lat1) * pi / 180;
     final dLon = (lon2 - lon1) * pi / 180;
-    final a = sin(dLat / 2) * sin(dLat / 2) +
+    final a =
+        sin(dLat / 2) * sin(dLat / 2) +
         cos(lat1 * pi / 180) *
             cos(lat2 * pi / 180) *
             sin(dLon / 2) *
@@ -169,36 +207,47 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
   Set<Marker> _buildMarkers() {
     final markers = <Marker>{};
     if (_barberLatLng != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('barber'),
-        position: _barberLatLng!,
-        infoWindow: InfoWindow(
-          title: widget.barberName,
-          snippet: 'Tu barbero',
+      markers.add(
+        Marker(
+          markerId: const MarkerId('barber'),
+          position: _barberLatLng!,
+          infoWindow: InfoWindow(
+            title: widget.barberName,
+            snippet: 'Tu barbero',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueAzure,
+          ),
         ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-      ));
+      );
     }
     if (_clientLatLng != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('client'),
-        position: _clientLatLng!,
-        infoWindow: const InfoWindow(title: 'Tu ubicación'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-      ));
+      markers.add(
+        Marker(
+          markerId: const MarkerId('client'),
+          position: _clientLatLng!,
+          infoWindow: const InfoWindow(title: 'Tu ubicación'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
     }
     return markers;
   }
 
   Set<Polyline> _buildPolyline() {
     if (_barberLatLng == null || _clientLatLng == null) return {};
+    final points = _routePoints.isNotEmpty
+        ? _routePoints
+        : [_barberLatLng!, _clientLatLng!];
     return {
       Polyline(
         polylineId: const PolylineId('route'),
-        points: [_barberLatLng!, _clientLatLng!],
+        points: points,
         color: Colors.blueAccent,
-        width: 4,
-        patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+        width: 5,
+        jointType: JointType.round,
+        endCap: Cap.roundCap,
+        startCap: Cap.roundCap,
       ),
     };
   }
@@ -216,100 +265,132 @@ class _BarberTrackingScreenState extends State<BarberTrackingScreen> {
 
   String _formatEta() {
     if (_distanceKm == null) return '...';
-    final min = (_distanceKm! * 1000 / 667).round(); // ~40 km/h moto
+    final min = (_distanceKm! * 1000 / 667).round();
     return min < 1 ? 'Llegando' : '~$min min';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final arrived = _status == 'completed';
+    final inService = _status == 'en_servicio';
+    final arrived = inService || _status == 'completed';
+
+    // Botón cancelar solo cuando en camino (confirmed)
+    final canCancel = _status == 'confirmed';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF111217),
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
-              // ── Mapa ──────────────────────────────────────────
-              GoogleMap(
-                initialCameraPosition: _initialCamera,
-                onMapCreated: (ctrl) {
-                  if (!_mapCompleter.isCompleted) _mapCompleter.complete(ctrl);
-                },
-                markers: _buildMarkers(),
-                polylines: _buildPolyline(),
-                myLocationEnabled: false,
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
-                mapToolbarEnabled: false,
-              ),
+          // ── Mapa ─────────────────────────────────────────────────────
+          GoogleMap(
+            initialCameraPosition: _initialCamera,
+            onMapCreated: (ctrl) {
+              if (!_mapCompleter.isCompleted) _mapCompleter.complete(ctrl);
+            },
+            onCameraMove: (_) {
+              if (_autoCenter) setState(() => _autoCenter = false);
+            },
+            markers: _buildMarkers(),
+            polylines: _buildPolyline(),
+            myLocationEnabled: false,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+          ),
 
-              // ── Botón volver ───────────────────────────────────
-SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: Colors.black54,
-                        child: IconButton(
-                          icon: const Icon(Icons.arrow_back,
-                              color: Colors.white),
-                          onPressed: () => Navigator.of(context).pop(),
+          // ── Barra superior ────────────────────────────────────────────
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.black54,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (!_autoCenter)
+                    CircleAvatar(
+                      backgroundColor: Colors.white,
+                      child: IconButton(
+                        tooltip: 'Centrar ruta',
+                        icon: const Icon(
+                          Icons.my_location_rounded,
+                          color: Colors.black87,
+                        ),
+                        onPressed: () {
+                          setState(() => _autoCenter = true);
+                          _fitBounds();
+                        },
+                      ),
+                    ),
+                  if (canCancel) ...[
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.cancel_outlined, size: 16),
+                      label: const Text(
+                        'Cancelar cita',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      onPressed: _cancelAppointment,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent.withValues(
+                          alpha: 0.85,
+                        ),
+                        foregroundColor: Colors.white,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
                         ),
                       ),
-                      // Botón cancelar cita
-                      if (_status != 'completed' && _status != 'cancelled')
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.cancel_outlined, size: 16),
-                          label: const Text('Cancelar cita',
-                              style: TextStyle(fontSize: 13)),
-                          onPressed: _cancelAppointment,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Colors.redAccent.withValues(alpha: 0.85),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 8),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20)),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+                    ),
+                  ],
+                ],
               ),
-
-              // ── Panel inferior ─────────────────────────────────
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1A1B22),
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(24)),
-                  ),
-                  child: arrived
-                      ? _ArrivedPanel(barberName: widget.barberName)
-                      : _EnRoutePanel(
-                          barberName: widget.barberName,
-                          hasLocation: _barberLatLng != null,
-                          distLabel: _formatDist(),
-                          etaLabel: _formatEta(),
-                          theme: theme,
-                        ),
-                ),
-              ),
-            ],
+            ),
           ),
-        );
+
+          // ── Panel inferior ────────────────────────────────────────────
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+              decoration: const BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: arrived
+                  ? _ArrivedPanel(
+                      barberName: widget.barberName,
+                      inService: inService,
+                    )
+                  : _EnRoutePanel(
+                      barberName: widget.barberName,
+                      hasLocation: _barberLatLng != null,
+                      distLabel: _formatDist(),
+                      etaLabel: _formatEta(),
+                      theme: theme,
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
-// ── Panel: barbero en camino ─────────────────────────────────────
+// ── Panel: barbero en camino ─────────────────────────────────────────
 class _EnRoutePanel extends StatelessWidget {
   final String barberName;
   final bool hasLocation;
@@ -331,77 +412,75 @@ class _EnRoutePanel extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header
-        Row(children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.blueAccent.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.two_wheeler,
-                color: Colors.blueAccent, size: 24),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  barberName,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17),
-                ),
-                Text(
-                  hasLocation
-                      ? 'Está en camino a tu ubicación'
-                      : 'Preparando ruta…',
-                  style: const TextStyle(
-                      color: Colors.white60, fontSize: 13),
-                ),
-              ],
-            ),
-          ),
-          // ETA badge
-          if (hasLocation)
+        Row(
+          children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.blueAccent.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(20),
+              padding: const EdgeInsets.all(10),
+              decoration: const BoxDecoration(
+                color: AppColors.goldSubtle,
+                shape: BoxShape.circle,
               ),
-              child: Text(
-                etaLabel,
-                style: const TextStyle(
-                    color: Colors.blueAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14),
+              child: const Icon(
+                Icons.two_wheeler,
+                color: AppColors.gold,
+                size: 24,
               ),
             ),
-        ]),
-
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(barberName, style: AppTextStyles.title),
+                  Text(
+                    hasLocation
+                        ? 'Está en camino a tu ubicación'
+                        : 'Preparando ruta…',
+                    style: AppTextStyles.caption,
+                  ),
+                ],
+              ),
+            ),
+            if (hasLocation)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.goldSubtle,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  etaLabel,
+                  style: AppTextStyles.ui(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: AppColors.gold,
+                  ),
+                ),
+              ),
+          ],
+        ),
         if (hasLocation) ...[
           const SizedBox(height: 18),
-          // Barra de progreso animada
           _PulsingProgressBar(color: theme.colorScheme.primary),
           const SizedBox(height: 16),
-          // Chips de distancia
-          Row(children: [
-            _TrackChip(
-              icon: Icons.straighten,
-              label: distLabel,
-              color: Colors.white70,
-            ),
-            const SizedBox(width: 8),
-            _TrackChip(
-              icon: Icons.two_wheeler,
-              label: etaLabel,
-              color: Colors.blueAccent,
-            ),
-          ]),
+          Row(
+            children: [
+              _TrackChip(
+                icon: Icons.straighten,
+                label: distLabel,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              _TrackChip(
+                icon: Icons.two_wheeler,
+                label: etaLabel,
+                color: AppColors.gold,
+              ),
+            ],
+          ),
         ] else ...[
           const SizedBox(height: 16),
           const Center(child: CircularProgressIndicator(strokeWidth: 2)),
@@ -411,31 +490,36 @@ class _EnRoutePanel extends StatelessWidget {
   }
 }
 
-// ── Panel: barbero llegó ─────────────────────────────────────────
+// ── Panel: barbero llegó / en servicio ───────────────────────────────
 class _ArrivedPanel extends StatelessWidget {
   final String barberName;
-  const _ArrivedPanel({required this.barberName});
+  final bool inService;
+  const _ArrivedPanel({required this.barberName, required this.inService});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.check_circle_rounded,
-            color: Colors.greenAccent, size: 48),
+        Icon(
+          inService ? Icons.content_cut_rounded : Icons.check_circle_rounded,
+          color: inService ? AppColors.gold : Colors.greenAccent,
+          size: 48,
+        ),
         const SizedBox(height: 12),
         Text(
-          '¡$barberName ha llegado!',
-          style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold),
+          inService
+              ? '¡$barberName está en tu puerta!'
+              : '¡Servicio completado!',
+          style: AppTextStyles.title,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 6),
-        const Text(
-          'Tu servicio de barbería comienza ahora',
-          style: TextStyle(color: Colors.white60, fontSize: 13),
+        Text(
+          inService
+              ? 'Tu servicio de barbería comienza ahora'
+              : '¡Gracias por usar YaCut!',
+          style: AppTextStyles.caption,
           textAlign: TextAlign.center,
         ),
       ],
@@ -443,7 +527,7 @@ class _ArrivedPanel extends StatelessWidget {
   }
 }
 
-// ── Barra de progreso con pulso ─────────────────────────────────
+// ── Barra de progreso con pulso ─────────────────────────────────────
 class _PulsingProgressBar extends StatefulWidget {
   final Color color;
   const _PulsingProgressBar({required this.color});
@@ -461,8 +545,9 @@ class _PulsingProgressBarState extends State<_PulsingProgressBar>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(seconds: 2))
-      ..repeat();
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
     _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
   }
 
@@ -478,7 +563,7 @@ class _PulsingProgressBarState extends State<_PulsingProgressBar>
       animation: _anim,
       builder: (_, __) {
         return LinearProgressIndicator(
-          value: null, // indeterminate
+          value: null,
           backgroundColor: widget.color.withValues(alpha: 0.12),
           color: widget.color,
           minHeight: 4,
@@ -489,13 +574,16 @@ class _PulsingProgressBarState extends State<_PulsingProgressBar>
   }
 }
 
-// ── Chip pequeño ────────────────────────────────────────────────
+// ── Chip pequeño ────────────────────────────────────────────────────
 class _TrackChip extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
-  const _TrackChip(
-      {required this.icon, required this.label, required this.color});
+  const _TrackChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
