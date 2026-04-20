@@ -103,6 +103,9 @@ class _BarberHomeScreenState extends State<BarberHomeScreen>
     // Panel SOS + stream de cita en servicio
     _loadBarberSosState();
     _startEnServicioListener();
+
+    // Iniciar GPS service para publicar ubicación del barbero
+    BarberGpsService.instance.start();
   }
 
   @override
@@ -141,6 +144,7 @@ class _BarberHomeScreenState extends State<BarberHomeScreen>
     _enServicioSub?.cancel();
     _shakeDetector?.stopListening();
     _notificationRefreshController.close();
+    BarberGpsService.instance.stop();
     super.dispose();
   }
 
