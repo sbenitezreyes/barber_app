@@ -56,6 +56,33 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   double? _savedAddressLng;
   bool _saving = false;
   bool _justAuthenticated = false; // Indica si el usuario acaba de autenticarse
+  bool _hasActiveAppointment = false; // Cita en_servicio con este barbero
+
+  @override
+  void initState() {
+    super.initState();
+    _checkActiveAppointment();
+  }
+
+  // Verificar si hay cita en_servicio con este barbero
+  void _checkActiveAppointment() {
+    final clientUid = FirebaseAuth.instance.currentUser?.uid;
+    if (clientUid == null) return;
+
+    FirebaseFirestore.instance
+        .collection('appointments')
+        .where('clientUid', isEqualTo: clientUid)
+        .where('barberUid', isEqualTo: widget.barberUid)
+        .where('status', isEqualTo: 'en_servicio')
+        .snapshots()
+        .listen((snapshot) {
+          if (mounted) {
+            setState(() {
+              _hasActiveAppointment = snapshot.docs.isNotEmpty;
+            });
+          }
+        });
+  }
 
   Future<(double, double)?> _geocodeAddress(String address) async {
     try {
@@ -312,6 +339,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
           isImmediate: _isImmediate,
           selectedDate: _selectedDate,
           selectedTime: _selectedTime,
+          hasActiveAppointment: _hasActiveAppointment,
           onImmediate: () => setState(() {
             _isImmediate = true;
             _selectedDate = null;
@@ -558,6 +586,7 @@ class _StepTime extends StatelessWidget {
   final bool isImmediate;
   final DateTime? selectedDate;
   final TimeOfDay? selectedTime;
+  final bool hasActiveAppointment;
   final VoidCallback onImmediate;
   final VoidCallback onDatePick;
   final VoidCallback onTimePick;
@@ -567,6 +596,7 @@ class _StepTime extends StatelessWidget {
     required this.isImmediate,
     required this.selectedDate,
     required this.selectedTime,
+    required this.hasActiveAppointment,
     required this.onImmediate,
     required this.onDatePick,
     required this.onTimePick,
@@ -593,6 +623,7 @@ class _StepTime extends StatelessWidget {
             subtitle: 'El barbero atenderá en cuanto esté disponible',
             selected: isImmediate,
             color: theme.colorScheme.primary,
+            enabled: !hasActiveAppointment,
             onTap: onImmediate,
           ),
 
@@ -808,6 +839,7 @@ class _OptionCard extends StatelessWidget {
   final bool selected;
   final Color color;
   final VoidCallback onTap;
+  final bool enabled; // Nuevo parámetro
 
   const _OptionCard({
     required this.icon,
@@ -816,49 +848,53 @@ class _OptionCard extends StatelessWidget {
     required this.selected,
     required this.color,
     required this.onTap,
+    this.enabled = true, // Por defecto habilitado
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: selected
-              ? color.withValues(alpha: 0.12)
-              : const Color(0xFF18181C),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? color : Colors.white12,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: selected ? color : Colors.white54),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: selected ? color : null,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.5,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: selected
+                ? color.withValues(alpha: 0.12)
+                : const Color(0xFF18181C),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? color : Colors.white12,
+              width: selected ? 2 : 1,
             ),
-            if (selected) Icon(Icons.check_circle, color: color, size: 20),
-          ],
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: selected ? color : Colors.white54),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: selected ? color : null,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected) Icon(Icons.check_circle, color: color, size: 20),
+            ],
+          ),
         ),
       ),
     );

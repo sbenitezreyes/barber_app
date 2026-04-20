@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../shared/splash_screen.dart';
 import '../../../shared/guest_auth_prompt.dart';
@@ -75,13 +76,35 @@ class ProfileTab extends StatefulWidget {
 
 class _ProfileTabState extends State<ProfileTab> {
   StreamSubscription<User?>? _authSub;
+  String? _firestoreName; // Guardar nombre de Firestore para sincronización
 
   @override
   void initState() {
     super.initState();
     _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        // Reload y refresh cuando el usuario cambia
+        FirebaseAuth.instance.currentUser?.reload().then((_) {
+          if (mounted) setState(() {});
+        });
+      }
     });
+    _loadFirestoreName();
+  }
+
+  // Cargar nombre desde Firestore como fuente de verdad
+  Future<void> _loadFirestoreName() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) return;
+    try {
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (mounted) {
+        setState(() {
+          _firestoreName = doc.data()?['name'] as String?;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -153,7 +176,11 @@ class _ProfileTabState extends State<ProfileTab> {
                   ),
           ),
           const SizedBox(height: 14),
-          Text(user.displayName ?? 'Cliente', style: AppTextStyles.title),
+          // Usar nombre de Firestore como fuente principal, fallback a displayName
+          Text(
+            _firestoreName ?? user.displayName ?? 'Usuario',
+            style: AppTextStyles.title,
+          ),
           const SizedBox(height: 4),
           Text(user.email ?? '', style: AppTextStyles.caption),
           const SizedBox(height: 24),

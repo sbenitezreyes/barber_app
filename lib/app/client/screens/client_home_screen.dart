@@ -70,6 +70,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Inicializar firstName con displayName actual
+    _initializeFirstName();
     _initFcm();
     _initBadgeStream();
     _shakeDetector = ShakeDetector.autoStart(
@@ -80,6 +82,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     // Reinicializar streams cuando cambia el usuario (login, registro, etc.)
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (!mounted) return;
+      _initializeFirstName();
       _initBadgeStream();
     });
 
@@ -101,23 +104,46 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     super.dispose();
   }
 
-  void _initBadgeStream() {
+  // Inicializar firstName desde displayName o Firestore
+  Future<void> _initializeFirstName() async {
     final user = FirebaseAuth.instance.currentUser;
-    final uid = user?.uid;
-    if (uid == null) return;
-    // Cargar nombre desde Firestore para tenerlo siempre actualizado
-    // (displayName puede estar vacío justo después del registro)
-    FirebaseFirestore.instance.collection('users').doc(uid).get().then((doc) {
+    if (user == null || user.isAnonymous) {
+      if (mounted) setState(() => _firstName = '');
+      return;
+    }
+
+    // Primero intentar con displayName (que debe estar sincronizado después del registro)
+    if (user.displayName != null && user.displayName!.isNotEmpty) {
+      if (mounted) setState(() => _firstName = user.displayName!.split(' ').first);
+    }
+
+    // Luego cargar desde Firestore para tener siempre el nombre actualizado
+    await _loadClientNameFromFirestore(user.uid);
+  }
+
+  // Cargar nombre desde Firestore
+  Future<void> _loadClientNameFromFirestore(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
       if (!mounted) return;
       final name = doc.data()?['name'] as String?;
       if (name != null && name.isNotEmpty) {
         setState(() => _firstName = name.split(' ').first);
-      } else {
-        // Fallback a displayName mientras Firestore carga
-        final dn = user?.displayName ?? '';
-        if (dn.isNotEmpty) setState(() => _firstName = dn.split(' ').first);
       }
-    });
+    } catch (e) {
+      debugPrint('Error cargando nombre del cliente: $e');
+    }
+  }
+
+  void _initBadgeStream() {
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
+    if (uid == null) return;
+
+    // Cargar nombre desde Firestore para tenerlo siempre actualizado
+    // (displayName puede estar vacío justo después del registro)
+    _loadClientNameFromFirestore(uid);
+
     // Load previously seen IDs from local storage
     SharedPreferences.getInstance().then((prefs) {
       final saved = prefs.getStringList('client_seen_notif_ids') ?? [];

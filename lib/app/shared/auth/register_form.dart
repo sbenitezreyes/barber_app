@@ -121,6 +121,13 @@ class _RegisterFormState extends State<RegisterForm> {
         }, SetOptions(merge: true));
         if (!context.mounted) return;
       }
+
+      // Sincronizar usuario después de Google SignIn
+      await FirebaseAuth.instance.currentUser?.reload();
+      await Future.delayed(const Duration(milliseconds: 300));
+      await FirebaseAuth.instance.currentUser?.reload();
+
+      if (!context.mounted) return;
       navigateToHome(context);
     } catch (e) {
       if (!context.mounted) return;
@@ -154,15 +161,24 @@ class _RegisterFormState extends State<RegisterForm> {
       final displayName = appConfig.isBarber && _cedulaData != null
           ? _cedulaData!.fullName
           : _nameController.text.trim();
+
+      // Actualizar displayName
       await credential.user?.updateDisplayName(displayName);
-      // Forzar refresco del objeto local para que displayName esté disponible
-      // de inmediato cuando la pantalla de destino lo lea
+
+      // Reload para sincronizar el displayName
       await FirebaseAuth.instance.currentUser?.reload();
+
+      // Esperar un poco para asegurar que Firebase sincronizó el displayName
+      await Future.delayed(const Duration(milliseconds: 300));
 
       // Usar currentUser (después del reload) en lugar de credential.user (snapshot anterior)
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
+        // Guardar perfil en Firestore CON el displayName actualizado
         await _saveUserProfile(user, appConfig.appType);
+
+        // Hacer reload nuevamente para estar completamente sincronizado
+        await user.reload();
       }
 
       if (!mounted) return;
