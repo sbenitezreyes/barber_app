@@ -119,14 +119,14 @@ Future<void> showClientReviewDialog(
     ),
   );
 
-  commentCtrl.dispose();
+  final comment = commentCtrl.text.trim();
   if (saved != true) return;
 
   HapticFeedback.mediumImpact();
   try {
     await reviewsRef.add({
       'rating': selectedRating,
-      'comment': commentCtrl.text.trim(),
+      'comment': comment,
       'createdAt': FieldValue.serverTimestamp(),
     });
     if (context.mounted) {

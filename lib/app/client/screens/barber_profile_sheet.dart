@@ -215,7 +215,6 @@ Future<void> showBarberReviewDialog(
       ),
     ),
   );
-  commentCtrl.dispose();
 }
 
 //  Widget principal
