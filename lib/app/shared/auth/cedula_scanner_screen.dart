@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 // Ocultar ImageFormat de camera para que no colisione con flutter_zxing
 import 'package:camera/camera.dart' hide ImageFormat;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter_zxing/flutter_zxing.dart';
@@ -173,7 +175,7 @@ class _CedulaScannerScreenState extends State<CedulaScannerScreen>
     _isProcessing = false;
   }
 
-  void _handleResult(Code code) {
+  Future<void> _handleResult(Code code) async {
     Uint8List? bytes = code.rawBytes;
 
     // Fallback: convertir text a bytes latin-1 si rawBytes no está disponible
@@ -192,12 +194,115 @@ class _CedulaScannerScreenState extends State<CedulaScannerScreen>
 
     final data = CedulaDecoder.decodeBytes(bytes);
     if (data != null) {
-      Navigator.of(context).pop(data);
-      return;
+      final canCheck = await _ensureAuthForCedulaCheck();
+      if (!canCheck) {
+        if (!mounted) return;
+        _showCedulaCheckErrorDialog();
+        return;
+      }
+
+      try {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .where('documentNumber', isEqualTo: data.documentNumber)
+            .limit(1)
+            .get();
+
+        if (!mounted) return;
+
+        if (snapshot.docs.isNotEmpty) {
+          _showDuplicateCedulaDialog(data.documentNumber);
+          return;
+        }
+
+        Navigator.of(context).pop(data);
+        return;
+      } on FirebaseException catch (e) {
+        debugPrint('Cedula check error: $e');
+        if (!mounted) return;
+        _showCedulaCheckErrorDialog();
+        return;
+      }
     }
 
     // DEBUG: muestra los bytes si el decode falla
     _showRawDialog(bytes);
+  }
+
+  void _showDuplicateCedulaDialog(String documentNumber) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(
+          'Cédula ya registrada',
+          style: AppTextStyles.title.copyWith(color: AppColors.gold),
+        ),
+        content: Text(
+          'La cédula $documentNumber ya está registrada en el sistema. '
+          'Si crees que esto es un error, contacta soporte. '
+          'De lo contrario, reinicia el escaneo con otra cédula.',
+          style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _detected = false);
+              await _camCtrl?.startImageStream(_onFrame).catchError((_) {});
+            },
+            child: Text(
+              'Reiniciar escaneo',
+              style: AppTextStyles.body.copyWith(color: AppColors.gold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _ensureAuthForCedulaCheck() async {
+    if (FirebaseAuth.instance.currentUser != null) return true;
+    try {
+      await FirebaseAuth.instance.signInAnonymously();
+      return FirebaseAuth.instance.currentUser != null;
+    } catch (e) {
+      debugPrint('Cedula check auth error: $e');
+      return false;
+    }
+  }
+
+  void _showCedulaCheckErrorDialog() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(
+          'No se pudo validar la cedula',
+          style: AppTextStyles.title.copyWith(color: AppColors.gold),
+        ),
+        content: Text(
+          'Revisa tu conexion e intenta de nuevo. Si el problema persiste, '
+          'contacta soporte.',
+          style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _detected = false);
+              await _camCtrl?.startImageStream(_onFrame).catchError((_) {});
+            },
+            child: Text(
+              'Reintentar escaneo',
+              style: AppTextStyles.body.copyWith(color: AppColors.gold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showRawDialog(Uint8List bytes) {
