@@ -21,11 +21,11 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data)
             .affectedKeys().hasOnly(['rating', 'ratingCount']);
 
-      // Barber's own profile updates: token refresh, location, liveRoute, availability
+      // Barber's own profile updates: token refresh, location, liveRoute, availability, schedule
       allow update: if request.auth != null
         && request.auth.uid == userId
         && request.resource.data.diff(resource.data)
-            .affectedKeys().hasOnly(['fcmToken', 'location', 'liveRoute', 'isAvailable']);
+            .affectedKeys().hasOnly(['fcmToken', 'location', 'liveRoute', 'isAvailable', 'schedule']);
 
       // User submits for identity verification (only allowed to set status → 'pending')
       allow update: if request.auth != null
