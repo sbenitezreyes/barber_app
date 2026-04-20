@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../client/screens/welcome_dialog.dart';
+
 /// Servicio compartido de autenticación con Google.
 /// Funciona igual para la app de cliente y la de barbero
 /// (ambas usan el mismo proyecto de Firebase).
@@ -8,9 +10,14 @@ class GoogleAuthService {
   static bool _initialized = false;
 
   /// Inicializa GoogleSignIn (debe llamarse una sola vez).
+  // Web client ID del proyecto Firebase (client_type: 3 en google-services.json).
+  // Necesario para que Google devuelva un ID token que Firebase pueda verificar.
+  static const _webClientId =
+      '345975115166-gqtuifchttuui1gs2an732uor5v8tq1e.apps.googleusercontent.com';
+
   static Future<void> _ensureInitialized() async {
     if (_initialized) return;
-    await GoogleSignIn.instance.initialize();
+    await GoogleSignIn.instance.initialize(serverClientId: _webClientId);
     _initialized = true;
   }
 
@@ -31,6 +38,12 @@ class GoogleAuthService {
 
     // 2. Obtener idToken
     final idToken = account.authentication.idToken;
+    if (idToken == null) {
+      throw Exception(
+        'Google no devolvió un ID token. Verifica que el SHA-1 del '
+        'keystore esté registrado en Firebase Console.',
+      );
+    }
 
     // 3. Crear credencial de Firebase con el idToken
     final credential = GoogleAuthProvider.credential(idToken: idToken);
@@ -44,5 +57,8 @@ class GoogleAuthService {
     await _ensureInitialized();
     await GoogleSignIn.instance.signOut();
     await FirebaseAuth.instance.signOut();
+
+    // Resetear el estado del diálogo de bienvenida para que se muestre cuando vuelva a ser invitado
+    await WelcomeDialog.reset();
   }
 }
