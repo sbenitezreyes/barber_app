@@ -64,6 +64,45 @@ class _LoginFormState extends State<LoginForm> {
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
+
+    // Si es barbero nuevo, crear horario por defecto en subcollección
+    if (role == 'barber' && !doc.exists) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('schedule')
+          .doc('config')
+          .set({
+            'monday': {
+              'enabled': true,
+              'intervals': [{'open': '08:00', 'close': '18:00'}]
+            },
+            'tuesday': {
+              'enabled': true,
+              'intervals': [{'open': '08:00', 'close': '18:00'}]
+            },
+            'wednesday': {
+              'enabled': true,
+              'intervals': [{'open': '08:00', 'close': '18:00'}]
+            },
+            'thursday': {
+              'enabled': true,
+              'intervals': [{'open': '08:00', 'close': '18:00'}]
+            },
+            'friday': {
+              'enabled': true,
+              'intervals': [{'open': '08:00', 'close': '18:00'}]
+            },
+            'saturday': {
+              'enabled': false,
+              'intervals': [{'open': '08:00', 'close': '18:00'}]
+            },
+            'sunday': {
+              'enabled': false,
+              'intervals': [{'open': '08:00', 'close': '18:00'}]
+            },
+          });
+    }
   }
 
   Future<void> _forgotPassword() async {

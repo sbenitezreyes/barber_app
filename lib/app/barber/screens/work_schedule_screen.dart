@@ -52,6 +52,40 @@ class DaySchedule {
            ];
 }
 
+// ── Función para generar horario por defecto ──────────────────────
+Map<String, dynamic> getDefaultSchedule() {
+  return {
+    'monday': {
+      'enabled': true,
+      'intervals': [{'open': '08:00', 'close': '18:00'}]
+    },
+    'tuesday': {
+      'enabled': true,
+      'intervals': [{'open': '08:00', 'close': '18:00'}]
+    },
+    'wednesday': {
+      'enabled': true,
+      'intervals': [{'open': '08:00', 'close': '18:00'}]
+    },
+    'thursday': {
+      'enabled': true,
+      'intervals': [{'open': '08:00', 'close': '18:00'}]
+    },
+    'friday': {
+      'enabled': true,
+      'intervals': [{'open': '08:00', 'close': '18:00'}]
+    },
+    'saturday': {
+      'enabled': false,
+      'intervals': [{'open': '08:00', 'close': '18:00'}]
+    },
+    'sunday': {
+      'enabled': false,
+      'intervals': [{'open': '08:00', 'close': '18:00'}]
+    },
+  };
+}
+
 // ── Pantalla principal ───────────────────────────────────────────
 
 class WorkScheduleScreen extends StatefulWidget {
@@ -80,6 +114,15 @@ class _WorkScheduleScreenState extends State<WorkScheduleScreen> {
     return FirebaseFirestore.instance.collection('users').doc(uid);
   }
 
+  DocumentReference<Map<String, dynamic>> get _scheduleDoc {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('schedule')
+        .doc('config');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -104,22 +147,21 @@ class _WorkScheduleScreenState extends State<WorkScheduleScreen> {
       DocumentSnapshot<Map<String, dynamic>> snap;
       try {
         // Intentar desde caché primero (respuesta instantánea)
-        snap = await _userDoc.get(const GetOptions(source: Source.cache));
+        snap = await _scheduleDoc.get(const GetOptions(source: Source.cache));
       } catch (_) {
-        // Si no hay caché, traer desde network
-        snap = await _userDoc.get();
+        // Si no hay caché, traer desde network con timeout
+        snap = await _scheduleDoc.get().timeout(const Duration(seconds: 10));
       }
       final data = snap.data();
-      if (data != null && data['schedule'] is Map) {
-        final saved = Map<String, dynamic>.from(data['schedule'] as Map);
+      if (data != null) {
         setState(() {
           for (final day in _schedule) {
             final key = _dayKey(day.name);
-            if (!saved.containsKey(key)) continue;
-            final d = Map<String, dynamic>.from(saved[key] as Map);
+            if (!data.containsKey(key)) continue;
+            final d = Map<String, dynamic>.from(data[key] as Map);
             day.enabled = d['enabled'] == true;
 
-            // Nuevo formato: intervals[]
+            // Formato: intervals[]
             if (d['intervals'] is List) {
               final raw = d['intervals'] as List;
               final parsed = raw
@@ -129,15 +171,6 @@ class _WorkScheduleScreenState extends State<WorkScheduleScreen> {
                   )
                   .toList();
               if (parsed.isNotEmpty) day.intervals = parsed;
-            }
-            // Formato antiguo: open/close strings → convertir a 1 intervalo
-            else if (d['open'] is String && d['close'] is String) {
-              day.intervals = [
-                TimeInterval(
-                  open: TimeInterval._parse(d['open'] as String),
-                  close: TimeInterval._parse(d['close'] as String),
-                ),
-              ];
             }
           }
         });
@@ -158,7 +191,8 @@ class _WorkScheduleScreenState extends State<WorkScheduleScreen> {
       };
     }
     try {
-      await _userDoc.set({'schedule': scheduleData}, SetOptions(merge: true));
+      // Guardar en subcollección /users/{uid}/schedule/config
+      await _scheduleDoc.set(scheduleData).timeout(const Duration(seconds: 15));
       if (mounted) {
         setState(() => _hasChanges = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -172,11 +206,11 @@ class _WorkScheduleScreenState extends State<WorkScheduleScreen> {
           ),
         );
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error al guardar. Intenta de nuevo.'),
+          SnackBar(
+            content: Text('Error al guardar: ${e.toString().split('\n').first}'),
             backgroundColor: Colors.redAccent,
           ),
         );
