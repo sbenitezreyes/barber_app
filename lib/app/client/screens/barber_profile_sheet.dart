@@ -75,6 +75,11 @@ class _Review {
   }
 }
 
+// Cache de reseñas a nivel de archivo — accesible desde showBarberReviewDialog
+// para invalidarlo tras publicar una reseña sin pasar por el sheet.
+final Map<String, ({List<_Review> reviews, DateTime cachedAt})> _barberReviewsCache = {};
+const _barberReviewsCacheTtl = Duration(minutes: 5);
+
 //  Función pública para mostrar el sheet
 void showBarberProfileSheet(
   BuildContext context,
@@ -108,12 +113,12 @@ Future<void> showBarberReviewDialog(
   }
 
   int selectedStars = 5;
-  final commentCtrl = TextEditingController();
+  String commentText = '';
   bool submitting = false;
   final messenger = ScaffoldMessenger.of(context);
   final barberDoc = FirebaseFirestore.instance.collection('users').doc(barberUid);
 
-  await showDialog<void>(
+  final result = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) => StatefulBuilder(
@@ -145,7 +150,7 @@ Future<void> showBarberReviewDialog(
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: commentCtrl,
+              onChanged: (v) => commentText = v,
               maxLines: 3,
               maxLength: 200,
               style: AppTextStyles.body,
@@ -178,7 +183,7 @@ Future<void> showBarberReviewDialog(
                           FirebaseAuth.instance.currentUser?.displayName ?? 'Cliente';
                       await barberDoc.collection('reviews').add({
                         'rating': selectedStars.toDouble(),
-                        'comment': commentCtrl.text.trim(),
+                        'comment': commentText.trim(),
                         'createdAt': FieldValue.serverTimestamp(),
                         'clientName': clientName,
                         'clientUid': clientUid,
@@ -194,9 +199,9 @@ Future<void> showBarberReviewDialog(
                         'rating': double.parse(newRating.toStringAsFixed(1)),
                         'ratingCount': count,
                       });
-                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (ctx.mounted) Navigator.pop(ctx, true);
                     } catch (e) {
-                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (ctx.mounted) Navigator.pop(ctx, false);
                       messenger.showSnackBar(SnackBar(
                         content: Text('Error: $e'),
                         backgroundColor: AppColors.error,
@@ -215,6 +220,15 @@ Future<void> showBarberReviewDialog(
       ),
     ),
   );
+
+  if (result == true) {
+    _barberReviewsCache.remove(barberUid);
+    messenger.showSnackBar(SnackBar(
+      content: Text('¡Reseña publicada!', style: AppTextStyles.ui(size: 13)),
+      backgroundColor: AppColors.success,
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
 }
 
 //  Widget principal
@@ -232,11 +246,10 @@ class _BarberProfileSheet extends StatefulWidget {
 }
 
 class _BarberProfileSheetState extends State<_BarberProfileSheet> {
-  // Caché estática de reseñas compartida entre todas las instancias del sheet.
-  // Se invalida cuando el usuario envía o elimina su reseña.
-  static final Map<String, ({List<_Review> reviews, DateTime cachedAt})>
-  _reviewsCache = {};
-  static const _reviewsCacheTtl = Duration(minutes: 5);
+  // Alias local al cache de nivel de archivo
+  Map<String, ({List<_Review> reviews, DateTime cachedAt})> get _reviewsCache =>
+      _barberReviewsCache;
+  Duration get _reviewsCacheTtl => _barberReviewsCacheTtl;
 
   bool _isFavorite = false;
   bool _isBusy = false;
@@ -526,7 +539,7 @@ class _BarberProfileSheetState extends State<_BarberProfileSheet> {
       return;
     }
     int selectedStars = 5;
-    final commentCtrl = TextEditingController();
+    String commentText = '';
     bool submitting = false;
     // Capturar el ScaffoldMessenger antes de abrir el diálogo
     final messenger = ScaffoldMessenger.of(context);
@@ -565,7 +578,7 @@ class _BarberProfileSheetState extends State<_BarberProfileSheet> {
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: commentCtrl,
+                onChanged: (v) => commentText = v,
                 maxLines: 3,
                 maxLength: 200,
                 style: AppTextStyles.body,
@@ -599,7 +612,7 @@ class _BarberProfileSheetState extends State<_BarberProfileSheet> {
                       try {
                         await _submitReview(
                           stars: selectedStars,
-                          comment: commentCtrl.text.trim(),
+                          comment: commentText.trim(),
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
                       } catch (e) {

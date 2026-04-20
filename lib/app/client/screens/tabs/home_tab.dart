@@ -29,6 +29,10 @@ class _HomeTabState extends State<HomeTab> {
   bool _permissionDeniedForever = false;
   Set<Marker> _markers = {};
   StreamSubscription<QuerySnapshot>? _barbersSub;
+  // Listeners individuales por barbero para actualizaciones de ubicación en tiempo real
+  final Map<String, StreamSubscription<DocumentSnapshot>> _locationSubs = {};
+  // Cache de íconos de marcadores para no reconstruirlos en cada actualización de posición
+  final Map<String, BitmapDescriptor> _iconCache = {};
   Timer? _scheduleTimer;
   // Caché local de barberos: no necesita tocar Firestore para re-evaluar horario
   final List<({String id, Map<String, dynamic> data})> _cachedBarbers = [];
@@ -53,6 +57,11 @@ class _HomeTabState extends State<HomeTab> {
   void dispose() {
     _barbersSub?.cancel();
     _scheduleTimer?.cancel();
+    for (final sub in _locationSubs.values) {
+      sub.cancel();
+    }
+    _locationSubs.clear();
+    _iconCache.clear();
     for (final img in _photoCache.values) {
       img?.dispose();
     }
@@ -60,6 +69,70 @@ class _HomeTabState extends State<HomeTab> {
     _photoCacheURL.clear();
     _photoCacheOrder.clear();
     super.dispose();
+  }
+
+  // Suscribe a cambios de documento individual para cada barbero visible.
+  // Cuando solo cambia `location`, actualiza ese marcador sin reconstruir todos.
+  void _updateLocationListeners() {
+    final activeUids = _cachedBarbers.map((b) => b.id).toSet();
+
+    // Cancelar listeners de barberos que ya no están en el mapa
+    final removed = _locationSubs.keys.where((uid) => !activeUids.contains(uid)).toList();
+    for (final uid in removed) {
+      _locationSubs.remove(uid)?.cancel();
+      _iconCache.remove(uid);
+    }
+
+    // Añadir listener para cada barbero nuevo
+    for (final barber in List.of(_cachedBarbers)) {
+      if (_locationSubs.containsKey(barber.id)) continue;
+      _locationSubs[barber.id] = FirebaseFirestore.instance
+          .collection('users')
+          .doc(barber.id)
+          .snapshots()
+          .listen((doc) async {
+            if (!doc.exists || !mounted) return;
+            final data = doc.data()!;
+            final loc = data['location'];
+            if (loc == null) return;
+            final lat = (loc['lat'] as num?)?.toDouble();
+            final lng = (loc['lng'] as num?)?.toDouble();
+            if (lat == null || lng == null) return;
+
+            // Actualizar posición en caché
+            final idx = _cachedBarbers.indexWhere((b) => b.id == barber.id);
+            if (idx >= 0) {
+              final old = _cachedBarbers[idx];
+              _cachedBarbers[idx] = (id: old.id, data: {...old.data, 'location': loc});
+            }
+
+            // Usar ícono en caché; si no existe aún, construirlo
+            final icon = _iconCache[barber.id] ??
+                await _buildMarkerIcon(
+                  (data['name'] ?? 'Barbero') as String,
+                  photoURL: data['photoURL'] as String?,
+                  uid: barber.id,
+                );
+            if (!mounted) return;
+            _iconCache[barber.id] = icon;
+
+            setState(() {
+              _markers = {
+                ..._markers.where((m) => m.markerId.value != barber.id),
+                Marker(
+                  markerId: MarkerId(barber.id),
+                  position: LatLng(lat, lng),
+                  icon: icon,
+                  anchor: const Offset(0.5, 1.0),
+                  onTap: () {
+                    final i = _cachedBarbers.indexWhere((b) => b.id == barber.id);
+                    if (i >= 0) showBarberProfileSheet(context, barber.id, _cachedBarbers[i].data);
+                  },
+                ),
+              };
+            });
+          });
+    }
   }
 
   Future<void> _requestLocation() async {
@@ -325,6 +398,7 @@ class _HomeTabState extends State<HomeTab> {
             _cachedBarbers.add((id: doc.id, data: data));
           }
           _rebuildMarkersFromCache();
+          _updateLocationListeners(); // Suscribirse a cambios de ubicación individuales
           _saveCachedBarbers(); // Persiste en disco para el próximo arranque
         });
   }
@@ -398,11 +472,8 @@ class _HomeTabState extends State<HomeTab> {
       if (!_isWithinSchedule(barber.data)) continue;
       final name = (barber.data['name'] ?? 'Barbero') as String;
       final photoURL = barber.data['photoURL'] as String?;
-      final icon = await _buildMarkerIcon(
-        name,
-        photoURL: photoURL,
-        uid: barber.id,
-      );
+      final icon = await _buildMarkerIcon(name, photoURL: photoURL, uid: barber.id);
+      _iconCache[barber.id] = icon; // guardar para reusar en actualizaciones de posición
       final loc = barber.data['location'] as Map;
       markers.add(
         Marker(

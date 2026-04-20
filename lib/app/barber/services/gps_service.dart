@@ -148,7 +148,7 @@ class BarberGpsService {
     _apptSub = _db
         .collection('appointments')
         .where('barberUid', isEqualTo: uid)
-        .where('status', isEqualTo: 'confirmed')
+        .where('status', whereIn: ['confirmed', 'en_servicio'])
         .snapshots()
         .listen((snap) {
           final now = DateTime.now();
@@ -231,9 +231,7 @@ class BarberGpsService {
     _db
         .collection('users')
         .doc(uid)
-        .set({
-          'location': {'lat': pos.latitude, 'lng': pos.longitude},
-        }, SetOptions(merge: true))
+        .update({'location': {'lat': pos.latitude, 'lng': pos.longitude}})
         .then((_) => print('✅ [BarberGpsService] Ubicación guardada en users/$uid'))
         .catchError((e) => print('❌ [BarberGpsService] Error guardando ubicación: $e'));
 

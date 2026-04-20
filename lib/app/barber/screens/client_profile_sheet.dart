@@ -27,7 +27,7 @@ Future<void> showClientReviewDialog(
   required String clientName,
 }) async {
   int selectedRating = 3;
-  final commentCtrl = TextEditingController();
+  String commentText = '';
   final reviewsRef = FirebaseFirestore.instance
       .collection('users')
       .doc(clientUid)
@@ -71,7 +71,7 @@ Future<void> showClientReviewDialog(
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: commentCtrl,
+              onChanged: (v) => commentText = v,
               maxLines: 3,
               maxLength: 200,
               style: AppTextStyles.ui(size: 13),
@@ -119,7 +119,7 @@ Future<void> showClientReviewDialog(
     ),
   );
 
-  final comment = commentCtrl.text.trim();
+  final comment = commentText.trim();
   if (saved != true) return;
 
   HapticFeedback.mediumImpact();
@@ -264,7 +264,7 @@ class _ClientProfileSheetState extends State<_ClientProfileSheet> {
   // ── Diálogo para agregar reseña ──────────────────────────────────
   Future<void> _showAddReview() async {
     int selectedRating = 3;
-    final commentCtrl = TextEditingController();
+    String commentText = '';
 
     final saved = await showDialog<bool>(
       context: context,
@@ -325,7 +325,7 @@ class _ClientProfileSheetState extends State<_ClientProfileSheet> {
               const SizedBox(height: 16),
               // Comentario opcional
               TextField(
-                controller: commentCtrl,
+                onChanged: (v) => commentText = v,
                 maxLines: 3,
                 maxLength: 200,
                 style: AppTextStyles.ui(size: 13),
@@ -401,7 +401,7 @@ class _ClientProfileSheetState extends State<_ClientProfileSheet> {
     try {
       await _reviewsRef.add({
         'rating': selectedRating,
-        'comment': commentCtrl.text.trim(),
+        'comment': commentText.trim(),
         'createdAt': FieldValue.serverTimestamp(),
       });
       // Recargar reseñas
