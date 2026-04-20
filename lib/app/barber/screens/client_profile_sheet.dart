@@ -21,6 +21,130 @@ void showClientProfileSheet(
   );
 }
 
+Future<void> showClientReviewDialog(
+  BuildContext context, {
+  required String clientUid,
+  required String clientName,
+}) async {
+  int selectedRating = 3;
+  final commentCtrl = TextEditingController();
+  final reviewsRef = FirebaseFirestore.instance
+      .collection('users')
+      .doc(clientUid)
+      .collection('barberReviews');
+
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setInner) => AlertDialog(
+        scrollable: true,
+        backgroundColor: AppColors.surfaceElevated,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Reseña anónima', style: AppTextStyles.display(size: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Solo otros barberos podrán ver esta reseña. El cliente no sabrá quién la escribió.',
+              style: AppTextStyles.ui(size: 12, color: AppColors.textTertiary),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(5, (i) {
+                  final filled = i < selectedRating;
+                  return GestureDetector(
+                    onTap: () => setInner(() => selectedRating = i + 1),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(
+                        filled ? Icons.star_rounded : Icons.star_outline_rounded,
+                        size: 36,
+                        color: filled ? AppColors.gold : AppColors.textTertiary,
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: commentCtrl,
+              maxLines: 3,
+              maxLength: 200,
+              style: AppTextStyles.ui(size: 13),
+              decoration: InputDecoration(
+                hintText: 'Comentario (opcional)',
+                hintStyle: AppTextStyles.ui(size: 13, color: AppColors.textTertiary),
+                filled: true,
+                fillColor: AppColors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.gold, width: 1.5),
+                ),
+                counterStyle: AppTextStyles.ui(size: 11, color: AppColors.textTertiary),
+                contentPadding: const EdgeInsets.all(12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancelar',
+                style: AppTextStyles.ui(size: 13, color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.gold,
+              foregroundColor: AppColors.background,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Publicar',
+                style: AppTextStyles.ui(size: 13, weight: FontWeight.w700, color: AppColors.background)),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  commentCtrl.dispose();
+  if (saved != true) return;
+
+  HapticFeedback.mediumImpact();
+  try {
+    await reviewsRef.add({
+      'rating': selectedRating,
+      'comment': commentCtrl.text.trim(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Reseña publicada', style: AppTextStyles.ui(size: 13)),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al publicar la reseña')),
+      );
+    }
+  }
+}
+
 // ── Modelo de reseña ────────────────────────────────────────────────
 class _BarberReview {
   final String id;

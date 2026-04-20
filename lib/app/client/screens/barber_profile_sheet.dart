@@ -93,6 +93,131 @@ void showBarberProfileSheet(
   );
 }
 
+Future<void> showBarberReviewDialog(
+  BuildContext context,
+  String barberUid,
+) async {
+  final clientUid = FirebaseAuth.instance.currentUser?.uid;
+  if (clientUid == null) {
+    showGuestAuthSheet(
+      context,
+      title: 'Deja tu reseña',
+      subtitle: 'Inicia sesión para calificar a este barbero',
+    );
+    return;
+  }
+
+  int selectedStars = 5;
+  final commentCtrl = TextEditingController();
+  bool submitting = false;
+  final messenger = ScaffoldMessenger.of(context);
+  final barberDoc = FirebaseFirestore.instance.collection('users').doc(barberUid);
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) => AlertDialog(
+        backgroundColor: AppColors.surfaceElevated,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        scrollable: true,
+        title: const Text('Agregar reseña'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (i) {
+                return GestureDetector(
+                  onTap: () => setDialogState(() => selectedStars = i + 1),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      i < selectedStars
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: Colors.amber,
+                      size: 36,
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: commentCtrl,
+              maxLines: 3,
+              maxLength: 200,
+              style: AppTextStyles.body,
+              decoration: InputDecoration(
+                hintText: 'Escribe tu comentario (opcional)',
+                hintStyle: AppTextStyles.ui(size: 14, color: AppColors.textTertiary),
+                filled: true,
+                fillColor: AppColors.background,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+                counterStyle: AppTextStyles.caption,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: submitting ? null : () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: submitting
+                ? null
+                : () async {
+                    setDialogState(() => submitting = true);
+                    try {
+                      final clientName =
+                          FirebaseAuth.instance.currentUser?.displayName ?? 'Cliente';
+                      await barberDoc.collection('reviews').add({
+                        'rating': selectedStars.toDouble(),
+                        'comment': commentCtrl.text.trim(),
+                        'createdAt': FieldValue.serverTimestamp(),
+                        'clientName': clientName,
+                        'clientUid': clientUid,
+                      });
+                      final allReviews = await barberDoc.collection('reviews').get();
+                      final count = allReviews.docs.length;
+                      final sum = allReviews.docs.fold<double>(
+                        0,
+                        (acc, d) => acc + ((d.data()['rating'] as num?)?.toDouble() ?? 0),
+                      );
+                      final newRating = count > 0 ? sum / count : 0.0;
+                      await barberDoc.update({
+                        'rating': double.parse(newRating.toStringAsFixed(1)),
+                        'ratingCount': count,
+                      });
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    } catch (e) {
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      messenger.showSnackBar(SnackBar(
+                        content: Text('Error: $e'),
+                        backgroundColor: AppColors.error,
+                      ));
+                    }
+                  },
+            child: submitting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Text('Publicar'),
+          ),
+        ],
+      ),
+    ),
+  );
+  commentCtrl.dispose();
+}
+
 //  Widget principal
 class _BarberProfileSheet extends StatefulWidget {
   final String barberUid;

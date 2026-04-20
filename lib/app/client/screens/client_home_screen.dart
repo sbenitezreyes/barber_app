@@ -385,16 +385,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Future<void> _openBarberReview() async {
     final uid = _enServicioBarberUid;
-    final name = _enServicioBarberName;
     if (uid == null) return;
-    _dismissCompleted(); // cierra el panel antes de abrir la reseña
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
+    _dismissCompleted();
     if (!mounted) return;
-    final data = doc.data() ?? {'name': name ?? 'Barbero'};
-    showBarberProfileSheet(context, uid, data);
+    await showBarberReviewDialog(context, uid);
   }
 
   bool get _showSos =>

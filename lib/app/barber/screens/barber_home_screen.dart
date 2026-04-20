@@ -674,7 +674,7 @@ class _BarberHomeScreenState extends State<BarberHomeScreen>
                   _completedClientUid = null;
                 });
                 if (uid != null) {
-                  showClientProfileSheet(
+                  showClientReviewDialog(
                     context,
                     clientUid: uid,
                     clientName: name,
