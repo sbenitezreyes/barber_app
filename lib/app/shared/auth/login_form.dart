@@ -35,6 +35,13 @@ class _LoginFormState extends State<LoginForm> {
       final credential = await GoogleAuthService.signInWithGoogle();
       if (credential == null) return;
       if (!context.mounted) return;
+
+      // Sincronizar usuario después de Google SignIn
+      await FirebaseAuth.instance.currentUser?.reload();
+      await Future.delayed(const Duration(milliseconds: 300));
+      await FirebaseAuth.instance.currentUser?.reload();
+
+      if (!context.mounted) return;
       navigateToHome(context, returnAfterAuth: widget.returnAfterAuth);
     } catch (e) {
       if (!context.mounted) return;
@@ -141,6 +148,10 @@ class _LoginFormState extends State<LoginForm> {
       if (credential.user != null) {
         await _ensureRoleExists(credential.user!);
         // Hacer reload para asegurar que todos los datos estén sincronizados
+        await FirebaseAuth.instance.currentUser?.reload();
+        // Esperar un poco para sincronización
+        await Future.delayed(const Duration(milliseconds: 300));
+        // Reload nuevamente para estar completamente sincronizado
         await FirebaseAuth.instance.currentUser?.reload();
       }
       if (!mounted) return;
