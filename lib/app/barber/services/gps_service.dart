@@ -208,7 +208,7 @@ class BarberGpsService {
         : _minWriteIntervalNoCita;
 
     final now = DateTime.now();
-    if (_lastWriteTime != null) {
+    if (_lastWriteTime != null && _lastWrittenLat != null && _lastWrittenLng != null) {
       final elapsed = now.difference(_lastWriteTime!);
       final moved = Geolocator.distanceBetween(
         _lastWrittenLat!,
@@ -227,11 +227,11 @@ class BarberGpsService {
 
     print('📤 [BarberGpsService] Escribiendo ubicación: lat=${pos.latitude.toStringAsFixed(6)}, lng=${pos.longitude.toStringAsFixed(6)} (cita: $hasActiveCita)');
 
-    // 1. Actualizar posición en el doc del usuario
+    // 1. Actualizar posición en el doc del usuario (usar set() con merge en caso que no exista)
     _db
         .collection('users')
         .doc(uid)
-        .update({'location': {'lat': pos.latitude, 'lng': pos.longitude}})
+        .set({'location': {'lat': pos.latitude, 'lng': pos.longitude}}, SetOptions(merge: true))
         .then((_) => print('✅ [BarberGpsService] Ubicación guardada en users/$uid'))
         .catchError((e) => print('❌ [BarberGpsService] Error guardando ubicación: $e'));
 
